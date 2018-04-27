@@ -6,16 +6,15 @@ import keras
 import numpy as np
 from keras.engine import Input
 from keras.engine import Model
-from keras.layers import Lambda, merge
-from theano.scalar import float32
-from keras.layers import Dense, Dropout, Embedding, LSTM, Bidirectional
+from keras.layers.merge import concatenate, add
+from keras.layers import Dense, Dropout, Embedding, LSTM, Bidirectional, Lambda
 
-from attention_lstm import AttentionLSTM
+from semanticparsing.basemodel.attention_lstm import AttentionLSTM
 
 
 def get_attention_lstm(word_index_to_embeddings_map, max_len, rich_context: bool=False, **kwargs):
     # converting embeddings to numpy 2d array: shape = (vocabulary_size, 300)
-    embeddings = np.asarray([np.array(x, dtype=float32) for x in word_index_to_embeddings_map.values()])
+    embeddings = np.asarray([np.array(x, dtype=np.float32) for x in word_index_to_embeddings_map.values()])
     print('embeddings.shape', embeddings.shape)
 
     lstm_size = kwargs.get('lstm_size')
@@ -44,9 +43,9 @@ def get_attention_lstm(word_index_to_embeddings_map, max_len, rich_context: bool
 
     if rich_context:
         # merge reason and claim
-        context_concat = merge([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_debate], mode='concat')
+        context_concat = concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_debate])
     else:
-        context_concat = merge([bidi_lstm_layer_reason, bidi_lstm_layer_claim], mode='concat')
+        context_concat = concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim])
 
     # max-pooling
     max_pool_lambda_layer = Lambda(lambda x: keras.backend.max(x, axis=1, keepdims=False), output_shape=lambda x: (x[0], x[2]))
@@ -57,7 +56,7 @@ def get_attention_lstm(word_index_to_embeddings_map, max_len, rich_context: bool
     attention_warrant1 = AttentionLSTM(lstm_size, attention_vector)(embedded_layer_warrant1_input)
 
     # concatenate them
-    dropout_layer = Dropout(dropout)(merge([attention_warrant0, attention_warrant1]))
+    dropout_layer = Dropout(dropout)(add([attention_warrant0, attention_warrant1]))
 
     # and add one extra layer with ReLU
     dense1 = Dense(int(lstm_size / 2), activation='relu')(dropout_layer)
@@ -67,8 +66,8 @@ def get_attention_lstm(word_index_to_embeddings_map, max_len, rich_context: bool
                    sequence_layer_claim_input, sequence_layer_debate_input], output=output_layer)
     model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
 
-    from keras.utils.visualize_util import plot
-    plot(model, show_shapes=True, to_file='/tmp/model-att.png')
+    # from keras.utils.visualize_util import plot
+    # plot(model, show_shapes=True, to_file='/tmp/model-att.png')
 
     # from keras.utils.visualize_util import plot
     # plot(model, show_shapes=True, to_file='/tmp/attlstm.png')
@@ -78,7 +77,7 @@ def get_attention_lstm(word_index_to_embeddings_map, max_len, rich_context: bool
 
 def get_attention_lstm_intra_warrant(word_index_to_embeddings_map, max_len, rich_context: bool=False, **kwargs):
     # converting embeddings to numpy 2d array: shape = (vocabulary_size, 300)
-    embeddings = np.asarray([np.array(x, dtype=float32) for x in word_index_to_embeddings_map.values()])
+    embeddings = np.asarray([np.array(x, dtype=np.float32) for x in word_index_to_embeddings_map.values()])
     print('embeddings.shape', embeddings.shape)
 
     lstm_size = kwargs.get('lstm_size')
@@ -113,17 +112,17 @@ def get_attention_lstm_intra_warrant(word_index_to_embeddings_map, max_len, rich
     # two attention vectors
 
     if rich_context:
-        attention_vector_for_w0 = max_pool_lambda_layer(merge([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant1, bidi_lstm_layer_debate], mode='concat'))
-        attention_vector_for_w1 = max_pool_lambda_layer(merge([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant0, bidi_lstm_layer_debate], mode='concat'))
+        attention_vector_for_w0 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant1, bidi_lstm_layer_debate]))
+        attention_vector_for_w1 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant0, bidi_lstm_layer_debate]))
     else:
-        attention_vector_for_w0 = max_pool_lambda_layer(merge([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant1], mode='concat'))
-        attention_vector_for_w1 = max_pool_lambda_layer(merge([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant0], mode='concat'))
+        attention_vector_for_w0 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant1]))
+        attention_vector_for_w1 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant0]))
 
     attention_warrant0 = AttentionLSTM(lstm_size, attention_vector_for_w0)(bidi_lstm_layer_warrant0)
     attention_warrant1 = AttentionLSTM(lstm_size, attention_vector_for_w1)(bidi_lstm_layer_warrant1)
 
     # concatenate them
-    dropout_layer = Dropout(dropout)(merge([attention_warrant0, attention_warrant1]))
+    dropout_layer = Dropout(dropout)(add([attention_warrant0, attention_warrant1]))
 
     # and add one extra layer with ReLU
     dense1 = Dense(int(lstm_size / 2), activation='relu')(dropout_layer)

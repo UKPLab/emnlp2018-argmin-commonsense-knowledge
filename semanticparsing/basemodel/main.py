@@ -4,9 +4,8 @@ import numpy as np
 from keras.preprocessing import sequence
 from keras.metrics import categorical_accuracy
 
-import data_loader
-import vocabulary_embeddings_extractor
-from models import get_attention_lstm, get_attention_lstm_intra_warrant
+from semanticparsing.basemodel import data_loader, vocabulary_embeddings_extractor
+from semanticparsing.basemodel.models import get_attention_lstm, get_attention_lstm_intra_warrant
 
 
 def get_predicted_labels(predicted_probabilities):
@@ -48,7 +47,7 @@ def __main__():
     print('Loading data...')
 
     current_dir = os.getcwd()
-    embeddings_cache_file = current_dir + "/embeddings_cache_file_word2vec.pkl.bz2"
+    embeddings_cache_file = current_dir + "/resources/embeddings_cache_file_word2vec.pkl.bz2"
 
     # load pre-extracted word-to-index maps and pre-filtered Glove embeddings
     word_to_indices_map, word_index_to_embeddings_map = \
@@ -56,15 +55,15 @@ def __main__():
 
     (train_instance_id_list, train_warrant0_list, train_warrant1_list, train_correct_label_w0_or_w1_list,
      train_reason_list, train_claim_list, train_debate_meta_data_list) = \
-        data_loader.load_single_file(current_dir + '/data/train-w-swap.tsv', word_to_indices_map)
+        data_loader.load_single_file(current_dir + '/data/arg-comprehension/train-w-swap.tsv', word_to_indices_map)
 
     (dev_instance_id_list, dev_warrant0_list, dev_warrant1_list, dev_correct_label_w0_or_w1_list,
      dev_reason_list, dev_claim_list, dev_debate_meta_data_list) = \
-        data_loader.load_single_file(current_dir + '/data/dev.tsv', word_to_indices_map)
+        data_loader.load_single_file(current_dir + '/data/arg-comprehension//dev.tsv', word_to_indices_map)
 
     (test_instance_id_list, test_warrant0_list, test_warrant1_list, test_correct_label_w0_or_w1_list,
      test_reason_list, test_claim_list, test_debate_meta_data_list) = \
-        data_loader.load_single_file(current_dir + '/data/test.tsv', word_to_indices_map)
+        data_loader.load_single_file(current_dir + '/data/arg-comprehension//test.tsv', word_to_indices_map)
 
     # pad all sequences
     (train_warrant0_list, train_warrant1_list, train_reason_list, train_claim_list, train_debate_meta_data_list) = [
@@ -88,49 +87,14 @@ def __main__():
 
         np.random.seed(12345 + i)  # for reproducibility
 
-        # simple bidi-lstm model
-        # model = get_attention_lstm(word_index_to_embeddings_map, max_len, rich_context=False, dropout=dropout, lstm_size=lstm_size)
-        # Dev accuracy: 0.481012658228
-        # Test accuracy: 0.5
-        # Acc dev
-        # 0.491   0.491   0.481
-        # Acc test
-        # 0.516   0.523   0.500
-
-        # simple bidi-lstm model w/ context
-        # model = get_attention_lstm(word_index_to_embeddings_map, max_len, rich_context=True, dropout=dropout, lstm_size=lstm_size)
-        # Dev accuracy: 0.48417721519
-        # Test accuracy: 0.513513513514
-        # Acc dev
-        # 0.538   0.484   0.484
-        # Acc test
-        # 0.505   0.525   0.514
-
-        # intra-warrant attention
-        # model = get_attention_lstm_intra_warrant(word_index_to_embeddings_map, max_len, rich_context=False, dropout=dropout, lstm_size=lstm_size)
-        # Dev accuracy: 0.651898734177
-        # Test accuracy: 0.538288288288
-        # Acc dev
-        # 0.611   0.652   0.652
-        # Acc test
-        # 0.554   0.561   0.538
-
-        # intra-warrant w/ context
         model = get_attention_lstm_intra_warrant(word_index_to_embeddings_map, max_len, rich_context=True, dropout=dropout, lstm_size=lstm_size)
-        # Dev accuracy: 0.680379746835
-        # Test accuracy: 0.54954954955
-        # Acc dev
-        # 0.630   0.601   0.680
-        # Acc test
-        # 0.507   0.511   0.550
-
 
 
         model.fit(
             {'sequence_layer_warrant0_input': train_warrant0_list, 'sequence_layer_warrant1_input': train_warrant1_list,
              'sequence_layer_reason_input': train_reason_list, 'sequence_layer_claim_input': train_claim_list,
              'sequence_layer_debate_input': train_debate_meta_data_list},
-            train_correct_label_w0_or_w1_list, nb_epoch=nb_epoch, batch_size=batch_size, verbose=verbose,
+            train_correct_label_w0_or_w1_list, epochs=nb_epoch, batch_size=batch_size, verbose=verbose,
             validation_split=0.1)
 
         # model predictions

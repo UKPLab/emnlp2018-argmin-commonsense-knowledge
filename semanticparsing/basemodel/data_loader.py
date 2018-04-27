@@ -2,7 +2,7 @@ import gzip
 import os.path
 from typing import Dict, Tuple, List
 
-import vocabulary_embeddings_extractor
+from semanticparsing.basemodel import vocabulary_embeddings_extractor
 
 
 def string_to_indices(string: str, word_to_indices_map_param: Dict, nb_words: int = None) -> List:
