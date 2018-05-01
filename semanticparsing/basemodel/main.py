@@ -2,10 +2,10 @@ import os
 
 import numpy as np
 from keras.preprocessing import sequence
-from keras.metrics import categorical_accuracy
 
 from semanticparsing.basemodel import data_loader, vocabulary_embeddings_extractor
-from semanticparsing.basemodel.models import get_attention_lstm, get_attention_lstm_intra_warrant
+from semanticparsing.basemodel.models import get_attention_lstm, get_attention_lstm_intra_warrant, get_attention_lstm_intra_warrant_kbembeddings
+from semanticparsing.wikidata import kb_embeddings, annotation_loader
 
 
 def get_predicted_labels(predicted_probabilities):
@@ -25,13 +25,8 @@ def get_predicted_labels(predicted_probabilities):
 
     # check type
     assert isinstance(predicted_labels_numpy, np.ndarray)
-    # convert to a Python list of integers
-    predicted_labels = predicted_labels_numpy.tolist()
-    assert isinstance(predicted_labels, list)
-    assert isinstance(predicted_labels[0], int)
-    # check it matches the gold labels
 
-    return predicted_labels
+    return predicted_labels_numpy
 
 
 def __main__():
@@ -40,7 +35,7 @@ def __main__():
 
     lstm_size = 64
     dropout = 0.9  # empirically tested on dev set
-    nb_epoch = 5  # empirically tested on dev set
+    nb_epoch = 4  # empirically tested on dev set
     max_len = 100  # padding length
     batch_size = 32
 
@@ -53,30 +48,44 @@ def __main__():
     word_to_indices_map, word_index_to_embeddings_map = \
         vocabulary_embeddings_extractor.load_cached_vocabulary_and_embeddings(embeddings_cache_file)
 
+    entity_to_indices_map, entity_index_to_embeddings_map = kb_embeddings.load_kb_embeddings("/home/sorokin/entity-linking/data/WikidataEmb/dec_17_50/")
+
     (train_instance_id_list, train_warrant0_list, train_warrant1_list, train_correct_label_w0_or_w1_list,
      train_reason_list, train_claim_list, train_debate_meta_data_list) = \
-        data_loader.load_single_file(current_dir + '/data/arg-comprehension/train-w-swap.tsv', word_to_indices_map)
+        data_loader.load_single_file(current_dir + '/data/arg-comprehension-full/train-full.txt', word_to_indices_map)
+
+    _, _, train_reason_entities_list, train_claim_entities_list = \
+        annotation_loader.load_single_file(current_dir + '/data/data-annotations/train_entitylinking.json', entity_to_indices_map)
 
     (dev_instance_id_list, dev_warrant0_list, dev_warrant1_list, dev_correct_label_w0_or_w1_list,
      dev_reason_list, dev_claim_list, dev_debate_meta_data_list) = \
-        data_loader.load_single_file(current_dir + '/data/arg-comprehension//dev.tsv', word_to_indices_map)
+        data_loader.load_single_file(current_dir + '/data/arg-comprehension-full//dev-full.txt', word_to_indices_map)
+
+    _, _, dev_reason_entities_list, dev_claim_entities_list = \
+        annotation_loader.load_single_file(current_dir + '/data/data-annotations/dev_entitylinking.json', entity_to_indices_map)
 
     (test_instance_id_list, test_warrant0_list, test_warrant1_list, test_correct_label_w0_or_w1_list,
      test_reason_list, test_claim_list, test_debate_meta_data_list) = \
         data_loader.load_single_file(current_dir + '/data/arg-comprehension//test.tsv', word_to_indices_map)
 
     # pad all sequences
-    (train_warrant0_list, train_warrant1_list, train_reason_list, train_claim_list, train_debate_meta_data_list) = [
+    (train_warrant0_list, train_warrant1_list, train_reason_list, train_claim_list, train_debate_meta_data_list,
+     train_reason_entities_list, train_claim_entities_list) = [
         sequence.pad_sequences(x, maxlen=max_len) for x in
-        (train_warrant0_list, train_warrant1_list, train_reason_list, train_claim_list, train_debate_meta_data_list)]
+        (train_warrant0_list, train_warrant1_list, train_reason_list, train_claim_list, train_debate_meta_data_list,
+         train_reason_entities_list, train_claim_entities_list)]
     (test_warrant0_list, test_warrant1_list, test_reason_list, test_claim_list, test_debate_meta_data_list) = [
         sequence.pad_sequences(x, maxlen=max_len) for x in
         (test_warrant0_list, test_warrant1_list, test_reason_list, test_claim_list, test_debate_meta_data_list)]
 
-    (dev_warrant0_list, dev_warrant1_list, dev_reason_list, dev_claim_list, dev_debate_meta_data_list) = [
+    (dev_warrant0_list, dev_warrant1_list, dev_reason_list, dev_claim_list, dev_debate_meta_data_list,
+     dev_reason_entities_list, dev_claim_entities_list) = [
         sequence.pad_sequences(x, maxlen=max_len) for x in (dev_warrant0_list, dev_warrant1_list, dev_reason_list,
-                                                            dev_claim_list, dev_debate_meta_data_list)]
-    assert train_warrant0_list.shape == train_warrant1_list.shape == train_reason_list.shape == train_claim_list.shape == train_debate_meta_data_list.shape
+                                                            dev_claim_list, dev_debate_meta_data_list,
+                                                            dev_reason_entities_list, dev_claim_entities_list)]
+
+    assert train_warrant0_list.shape == train_warrant1_list.shape == train_reason_list.shape == train_claim_list.shape \
+           == train_debate_meta_data_list.shape == train_reason_entities_list.shape, train_claim_entities_list.shape
 
     # ---------------
     all_runs_report = []  # list of dict
@@ -87,13 +96,15 @@ def __main__():
 
         np.random.seed(12345 + i)  # for reproducibility
 
-        model = get_attention_lstm_intra_warrant(word_index_to_embeddings_map, max_len, rich_context=True, dropout=dropout, lstm_size=lstm_size)
+        model = get_attention_lstm_intra_warrant_kbembeddings(word_index_to_embeddings_map, max_len, rich_context=True,
+                                                              dropout=dropout, lstm_size=lstm_size, kb_embeddings=entity_index_to_embeddings_map)
 
 
-        model.fit(
+        history = model.fit(
             {'sequence_layer_warrant0_input': train_warrant0_list, 'sequence_layer_warrant1_input': train_warrant1_list,
              'sequence_layer_reason_input': train_reason_list, 'sequence_layer_claim_input': train_claim_list,
-             'sequence_layer_debate_input': train_debate_meta_data_list},
+             'sequence_layer_debate_input': train_debate_meta_data_list,
+             'sequence_layer_reason_input_kb': train_reason_entities_list, 'sequence_layer_claim_input_kb': train_claim_entities_list},
             train_correct_label_w0_or_w1_list, epochs=nb_epoch, batch_size=batch_size, verbose=verbose,
             validation_split=0.1)
 
@@ -101,23 +112,24 @@ def __main__():
         predicted_probabilities_dev = model.predict(
             {'sequence_layer_warrant0_input': dev_warrant0_list, 'sequence_layer_warrant1_input': dev_warrant1_list,
              'sequence_layer_reason_input': dev_reason_list, 'sequence_layer_claim_input': dev_claim_list,
-             'sequence_layer_debate_input': dev_debate_meta_data_list},
+             'sequence_layer_debate_input': dev_debate_meta_data_list,
+             'sequence_layer_reason_input_kb': dev_reason_entities_list, 'sequence_layer_claim_input_kb': dev_claim_entities_list},
             batch_size=batch_size, verbose=1)
 
-        predicted_probabilities_test = model.predict(
-            {'sequence_layer_warrant0_input': test_warrant0_list, 'sequence_layer_warrant1_input': test_warrant1_list,
-             'sequence_layer_reason_input': test_reason_list, 'sequence_layer_claim_input': test_claim_list,
-             'sequence_layer_debate_input': test_debate_meta_data_list},
-            batch_size=batch_size, verbose=1)
+        # predicted_probabilities_test = model.predict(
+        #     {'sequence_layer_warrant0_input': test_warrant0_list, 'sequence_layer_warrant1_input': test_warrant1_list,
+        #      'sequence_layer_reason_input': test_reason_list, 'sequence_layer_claim_input': test_claim_list,
+        #      'sequence_layer_debate_input': test_debate_meta_data_list},
+        #     batch_size=batch_size, verbose=1)
 
         predicted_labels_dev = get_predicted_labels(predicted_probabilities_dev)
-        predicted_labels_test = get_predicted_labels(predicted_probabilities_test)
+        # predicted_labels_test = get_predicted_labels(predicted_probabilities_test)
 
-        assert isinstance(test_correct_label_w0_or_w1_list, list)
-        assert isinstance(test_correct_label_w0_or_w1_list[0], int)
-        assert len(test_correct_label_w0_or_w1_list) == len(predicted_labels_test)
-        acc_dev = categorical_accuracy(dev_correct_label_w0_or_w1_list, predicted_labels_dev)
-        acc_test = categorical_accuracy(test_correct_label_w0_or_w1_list, predicted_labels_test)
+        # assert isinstance(test_correct_label_w0_or_w1_list, list)
+        # assert isinstance(test_correct_label_w0_or_w1_list[0], int)
+        # assert len(test_correct_label_w0_or_w1_list) == len(predicted_labels_test)
+        acc_dev = np.sum(np.asarray(dev_correct_label_w0_or_w1_list) == predicted_labels_dev) / len(dev_correct_label_w0_or_w1_list)
+        acc_test = 0.0 #np.sum(np.asarray(test_correct_label_w0_or_w1_list) == predicted_labels_test) / len(test_correct_label_w0_or_w1_list)
         print('Dev accuracy:', acc_dev)
         print('Test accuracy:', acc_test)
         # update report
@@ -127,7 +139,7 @@ def __main__():
         report['gold_labels_dev'] = dev_correct_label_w0_or_w1_list
         report['gold_labels_test'] = test_correct_label_w0_or_w1_list
         report['predicted_labels_dev'] = predicted_labels_dev
-        report['predicted_labels_test'] = predicted_labels_test
+        report['predicted_labels_test'] = None
         report['ids_test'] = test_instance_id_list
         report['ids_dev'] = dev_instance_id_list
         all_runs_report.append(report)
@@ -142,16 +154,16 @@ def __main__():
     for r in all_runs_report:
         print("%.3f\t" % r['acc_test'], end='')
     print("\nInstances correct")
-    for r in all_runs_report:
-        good_ids = set()
-        wrong_ids = set()
-        for i, (g, p, instance_id) in enumerate(zip(r['gold_labels_dev'], r['predicted_labels_dev'], r['ids_dev'])):
-            if g == p:
-                good_ids.add(instance_id)
-            else:
-                wrong_ids.add(instance_id)
-        print("Good_ids\t", good_ids)
-        print("Wrong_ids\t", wrong_ids)
+    # for r in all_runs_report:
+    #     good_ids = set()
+    #     wrong_ids = set()
+    #     for i, (g, p, instance_id) in enumerate(zip(r['gold_labels_dev'], r['predicted_labels_dev'], r['ids_dev'])):
+    #         if g == p:
+    #             good_ids.add(instance_id)
+    #         else:
+    #             wrong_ids.add(instance_id)
+    #     print("Good_ids\t", good_ids)
+    #     print("Wrong_ids\t", wrong_ids)
 
 
 def print_error_analysis_dev(ids: set) -> None:
