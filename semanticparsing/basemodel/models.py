@@ -165,8 +165,8 @@ def get_attention_lstm_intra_warrant_kbembeddings(word_index_to_embeddings_map, 
     embedded_layer_reason_input_kb = Embedding(kb_embeddings.shape[0], kb_embeddings.shape[1], input_length=max_len, weights=[kb_embeddings], mask_zero=True)(sequence_layer_reason_input_kb)
     embedded_layer_claim_input_kb = Embedding(kb_embeddings.shape[0], kb_embeddings.shape[1], input_length=max_len, weights=[kb_embeddings], mask_zero=True)(sequence_layer_claim_input_kb)
 
-    embedded_layer_reason_input = concatenate([embedded_layer_reason_input, embedded_layer_reason_input_kb])
-    embedded_layer_claim_input = concatenate([embedded_layer_claim_input, embedded_layer_claim_input_kb])
+    # embedded_layer_reason_input = concatenate([embedded_layer_reason_input, embedded_layer_reason_input_kb])
+    # embedded_layer_claim_input = concatenate([embedded_layer_claim_input, embedded_layer_claim_input_kb])
 
     bidi_lstm_layer_warrant0 = Bidirectional(LSTM(lstm_size, return_sequences=True), name='BiDiLSTM-W0')(embedded_layer_warrant0_input)
     bidi_lstm_layer_warrant1 = Bidirectional(LSTM(lstm_size, return_sequences=True), name='BiDiLSTM-W1')(embedded_layer_warrant1_input)
@@ -181,8 +181,8 @@ def get_attention_lstm_intra_warrant_kbembeddings(word_index_to_embeddings_map, 
     # two attention vectors
 
     if rich_context:
-        attention_vector_for_w0 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant1, bidi_lstm_layer_debate]))
-        attention_vector_for_w1 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant0, bidi_lstm_layer_debate]))
+        attention_vector_for_w0 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant1, bidi_lstm_layer_debate, embedded_layer_reason_input_kb, embedded_layer_claim_input_kb]))
+        attention_vector_for_w1 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant0, bidi_lstm_layer_debate, embedded_layer_reason_input_kb, embedded_layer_claim_input_kb]))
     else:
         attention_vector_for_w0 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant1]))
         attention_vector_for_w1 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant0]))

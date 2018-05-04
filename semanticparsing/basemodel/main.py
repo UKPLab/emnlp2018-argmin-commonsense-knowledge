@@ -34,8 +34,8 @@ def __main__():
     verbose = 1
 
     lstm_size = 64
-    dropout = 0.9  # empirically tested on dev set
-    nb_epoch = 4  # empirically tested on dev set
+    dropout = 0.5  # empirically tested on dev set
+    nb_epoch = 3  # empirically tested on dev set
     max_len = 100  # padding length
     batch_size = 32
 
@@ -48,7 +48,7 @@ def __main__():
     word_to_indices_map, word_index_to_embeddings_map = \
         vocabulary_embeddings_extractor.load_cached_vocabulary_and_embeddings(embeddings_cache_file)
 
-    entity_to_indices_map, entity_index_to_embeddings_map = kb_embeddings.load_kb_embeddings("/home/sorokin/entity-linking/data/WikidataEmb/dec_17_50/")
+    entity_to_indices_map, entity_index_to_embeddings_map = kb_embeddings.load_kb_embeddings("/home/sorokin/entity-linking/data/WikidataEmb/dec_17_100/")
 
     (train_instance_id_list, train_warrant0_list, train_warrant1_list, train_correct_label_w0_or_w1_list,
      train_reason_list, train_claim_list, train_debate_meta_data_list) = \
@@ -91,7 +91,7 @@ def __main__():
     all_runs_report = []  # list of dict
 
     # 3 repeats to show how much randomness is in it
-    for i in range(1, 4):
+    for i in range(1, 6):
         print("Run: ", i)
 
         np.random.seed(12345 + i)  # for reproducibility
