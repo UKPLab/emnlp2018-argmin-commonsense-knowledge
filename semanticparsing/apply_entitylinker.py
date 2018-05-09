@@ -38,7 +38,7 @@ EL.mention_extraction.np_parser = EL.mention_extraction.NgramNpParser(exclude_po
 @click.argument('path_to_file')
 def apply(path_to_file):
 
-    entitylinker = EL.MLLinker(path_to_model="../entity-linking/trainedmodels/FeatureModel_6.torchweights",
+    entitylinker = EL.MLLinker(path_to_model="../entity-linking/trainedmodels/FeatureModel_SimplifiedVCG.torchweights",
                                confidence=0.01,
                                num_candidates=3)
 
@@ -58,7 +58,7 @@ def apply(path_to_file):
                 e['linkings'] = [(l.get('kbID'), l.get('label')) for l in e['linkings']]
             output_per_story.append(sent)
         output_data.append(output_per_story)
-    with open("data/train_output.json", "w") as out:
+    with open("data/test_output.json", "w") as out:
         json.dump(output_data, out, sort_keys=True, indent=4, cls=SentenceEncoder)
 
 
