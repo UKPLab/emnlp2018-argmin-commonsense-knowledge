@@ -9,8 +9,9 @@ from keras import callbacks
 import hyperopt as hy
 
 from semanticparsing.basemodel import data_loader, vocabulary_embeddings_extractor
-from semanticparsing.basemodel.models import get_attention_lstm, get_attention_lstm_intra_warrant, get_attention_lstm_intra_warrant_kbembeddings
-from semanticparsing.wikidata import kb_embeddings, annotation_loader
+from semanticparsing.basemodel.models import get_attention_lstm, get_attention_lstm_intra_warrant, get_attention_lstm_intra_warrant_world_knowledge
+from semanticparsing.wikidata import kb_embeddings, annotation_loader as WD
+from semanticparsing.framenet import fn_embeddings, annotation_loader as FN
 
 max_len = 100  # padding length
 
@@ -58,40 +59,54 @@ def __main__():
         vocabulary_embeddings_extractor.load_cached_vocabulary_and_embeddings(embeddings_cache_file)
 
     entity_to_indices_map, entity_index_to_embeddings_map = kb_embeddings.load_kb_embeddings("/home/sorokin/entity-linking/data/WikidataEmb/dec_17_100/")
+    frame_to_indices_map, frame_index_to_embeddings_map = fn_embeddings.load_fn_embeddings(current_dir + "/data/frameEmbeddings/dict_frame_to_emb_100dim_wsb_npArray.pkl")
 
     (train_instance_id_list, train_warrant0_list, train_warrant1_list, train_correct_label_w0_or_w1_list,
      train_reason_list, train_claim_list, train_debate_meta_data_list) = \
         data_loader.load_single_file(current_dir + '/data/arg-comprehension-full/train-full.txt', word_to_indices_map)
 
     train_warrant0_entities_list, train_warrant1_entities_list, train_reason_entities_list, train_claim_entities_list = \
-        annotation_loader.load_single_file(current_dir + '/data/data-annotations/train_entitylinking.json', entity_to_indices_map)
+        WD.load_single_file(current_dir + '/data/data-annotations/train_entitylinking.json', entity_to_indices_map)
+
+    train_warrant0_frames_list, train_warrant1_frames_list, train_reason_frames_list, train_claim_frames_list = \
+        FN.load_single_file(current_dir + '/data/data-annotations/train-full_predictions_with_lexicon_IH.pickle',
+                            train_instance_id_list, frame_to_indices_map)
 
     (dev_instance_id_list, dev_warrant0_list, dev_warrant1_list, dev_correct_label_w0_or_w1_list,
      dev_reason_list, dev_claim_list, dev_debate_meta_data_list) = \
         data_loader.load_single_file(current_dir + '/data/arg-comprehension-full//dev-full.txt', word_to_indices_map)
 
     dev_warrant0_entities_list, dev_warrant1_entities_list, dev_reason_entities_list, dev_claim_entities_list = \
-        annotation_loader.load_single_file(current_dir + '/data/data-annotations/dev_entitylinking.json', entity_to_indices_map)
+        WD.load_single_file(current_dir + '/data/data-annotations/dev_entitylinking.json', entity_to_indices_map)
 
-    (test_instance_id_list, test_warrant0_list, test_warrant1_list, test_correct_label_w0_or_w1_list,
-     test_reason_list, test_claim_list, test_debate_meta_data_list) = \
-        data_loader.load_single_file(current_dir + '/data/arg-comprehension//test.tsv', word_to_indices_map)
+    dev_warrant0_frames_list, dev_warrant1_frames_list, dev_reason_frames_list, dev_claim_frames_list = \
+        FN.load_single_file(current_dir + '/data/data-annotations/dev-full_predictions_with_lexicon_IH.pickle',
+                            dev_instance_id_list, frame_to_indices_map)
+
+    # (test_instance_id_list, test_warrant0_list, test_warrant1_list, test_correct_label_w0_or_w1_list,
+    #  test_reason_list, test_claim_list, test_debate_meta_data_list) = \
+    #     data_loader.load_single_file(current_dir + '/data/arg-comprehension//test.tsv', word_to_indices_map)
 
     # pad all sequences
     (train_warrant0_list, train_warrant1_list, train_reason_list, train_claim_list, train_debate_meta_data_list,
-     train_warrant0_entities_list, train_warrant1_entities_list, train_reason_entities_list, train_claim_entities_list) = [
+     train_warrant0_entities_list, train_warrant1_entities_list, train_reason_entities_list, train_claim_entities_list,
+     train_warrant0_frames_list, train_warrant1_frames_list, train_reason_frames_list, train_claim_frames_list) = [
         sequence.pad_sequences(x, maxlen=max_len) for x in
         (train_warrant0_list, train_warrant1_list, train_reason_list, train_claim_list, train_debate_meta_data_list,
-         train_warrant0_entities_list, train_warrant1_entities_list, train_reason_entities_list, train_claim_entities_list)]
-    (test_warrant0_list, test_warrant1_list, test_reason_list, test_claim_list, test_debate_meta_data_list) = [
-        sequence.pad_sequences(x, maxlen=max_len) for x in
-        (test_warrant0_list, test_warrant1_list, test_reason_list, test_claim_list, test_debate_meta_data_list)]
+         train_warrant0_entities_list, train_warrant1_entities_list, train_reason_entities_list, train_claim_entities_list,
+         train_warrant0_frames_list, train_warrant1_frames_list, train_reason_frames_list, train_claim_frames_list)]
+
+    # (test_warrant0_list, test_warrant1_list, test_reason_list, test_claim_list, test_debate_meta_data_list) = [
+    #     sequence.pad_sequences(x, maxlen=max_len) for x in
+    #     (test_warrant0_list, test_warrant1_list, test_reason_list, test_claim_list, test_debate_meta_data_list)]
 
     (dev_warrant0_list, dev_warrant1_list, dev_reason_list, dev_claim_list, dev_debate_meta_data_list,
-     dev_warrant0_entities_list, dev_warrant1_entities_list, dev_reason_entities_list, dev_claim_entities_list) = [
+     dev_warrant0_entities_list, dev_warrant1_entities_list, dev_reason_entities_list, dev_claim_entities_list,
+     dev_warrant0_frames_list, dev_warrant1_frames_list, dev_reason_frames_list, dev_claim_frames_list) = [
         sequence.pad_sequences(x, maxlen=max_len) for x in
         (dev_warrant0_list, dev_warrant1_list, dev_reason_list, dev_claim_list, dev_debate_meta_data_list,
-         dev_warrant0_entities_list, dev_warrant1_entities_list, dev_reason_entities_list, dev_claim_entities_list)]
+         dev_warrant0_entities_list, dev_warrant1_entities_list, dev_reason_entities_list, dev_claim_entities_list,
+         dev_warrant0_frames_list, dev_warrant1_frames_list, dev_reason_frames_list, dev_claim_frames_list)]
 
     assert train_warrant0_list.shape == train_warrant1_list.shape == train_reason_list.shape == train_claim_list.shape \
            == train_debate_meta_data_list.shape == train_reason_entities_list.shape, train_claim_entities_list.shape
@@ -110,19 +125,23 @@ def __main__():
         trials_counter += 1
 
         accs = []
-        for i in range(1, 6):
+        for i in range(1, 4):
             print("Run: ", i)
 
             np.random.seed(12345 + i)  # for reproducibility
 
-            model = get_attention_lstm_intra_warrant(word_index_to_embeddings_map, max_len, rich_context=True,
-                                                                  dropout=dropout, lstm_size=lstm_size, kb_embeddings=entity_index_to_embeddings_map)
+            model = get_attention_lstm_intra_warrant_world_knowledge(word_index_to_embeddings_map, max_len, rich_context=True,
+                                                                  dropout=dropout, lstm_size=lstm_size,
+                                                                     kb_embeddings=entity_index_to_embeddings_map,
+                                                                     fn_embeddings=frame_index_to_embeddings_map)
             model.fit(
                 {'sequence_layer_warrant0_input': train_warrant0_list, 'sequence_layer_warrant1_input': train_warrant1_list,
                  'sequence_layer_reason_input': train_reason_list, 'sequence_layer_claim_input': train_claim_list,
                  'sequence_layer_debate_input': train_debate_meta_data_list,
                  'sequence_layer_warrant0_input_kb': train_warrant0_entities_list, 'sequence_layer_warrant1_input_kb': train_warrant1_entities_list,
-                 'sequence_layer_reason_input_kb': train_reason_entities_list, 'sequence_layer_claim_input_kb': train_claim_entities_list},
+                 'sequence_layer_reason_input_kb': train_reason_entities_list, 'sequence_layer_claim_input_kb': train_claim_entities_list,
+                 'sequence_layer_warrant0_input_fn': train_warrant0_frames_list, 'sequence_layer_warrant1_input_fn': train_warrant1_frames_list,
+                 'sequence_layer_reason_input_fn': train_reason_frames_list, 'sequence_layer_claim_input_fn': train_claim_frames_list},
                 train_correct_label_w0_or_w1_list, epochs=nb_epoch, batch_size=batch_size, verbose=verbose,
                 validation_split=0.1,
                 callbacks=[callbacks.EarlyStopping(monitor="val_acc", patience=2, verbose=1),
@@ -136,7 +155,9 @@ def __main__():
                  'sequence_layer_reason_input': dev_reason_list, 'sequence_layer_claim_input': dev_claim_list,
                  'sequence_layer_debate_input': dev_debate_meta_data_list,
                  'sequence_layer_warrant0_input_kb': dev_warrant0_entities_list, 'sequence_layer_warrant1_input_kb': dev_warrant1_entities_list,
-                 'sequence_layer_reason_input_kb': dev_reason_entities_list, 'sequence_layer_claim_input_kb': dev_claim_entities_list},
+                 'sequence_layer_reason_input_kb': dev_reason_entities_list, 'sequence_layer_claim_input_kb': dev_claim_entities_list,
+                 'sequence_layer_warrant0_input_fn': dev_warrant0_frames_list, 'sequence_layer_warrant1_input_fn': dev_warrant1_frames_list,
+                 'sequence_layer_reason_input_fn': dev_reason_frames_list, 'sequence_layer_claim_input_fn': dev_claim_frames_list},
                 batch_size=batch_size, verbose=1)
 
             predicted_labels_dev = get_predicted_labels(predicted_probabilities_dev)

@@ -141,7 +141,13 @@ def get_attention_lstm_intra_warrant(word_index_to_embeddings_map, max_len, rich
     return model
 
 
-def get_attention_lstm_intra_warrant_kbembeddings(word_index_to_embeddings_map, max_len, rich_context=False, lstm_size=32, dropout=0.1, kb_embeddings=None):
+def get_attention_lstm_intra_warrant_world_knowledge(word_index_to_embeddings_map,
+                                                     max_len,
+                                                     rich_context=False,
+                                                     lstm_size=32,
+                                                     dropout=0.1,
+                                                     kb_embeddings=None,
+                                                     fn_embeddings=None):
     # converting embeddings to numpy 2d array: shape = (vocabulary_size, 300)
     embeddings = np.asarray([np.array(x, dtype=np.float32) for x in word_index_to_embeddings_map.values()])
 
@@ -152,27 +158,54 @@ def get_attention_lstm_intra_warrant_kbembeddings(word_index_to_embeddings_map, 
     sequence_layer_claim_input = Input(shape=(max_len,), dtype='int32', name="sequence_layer_claim_input")
     sequence_layer_debate_input = Input(shape=(max_len,), dtype='int32', name="sequence_layer_debate_input")
 
-    sequence_layer_warrant0_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_warrant0_input_kb")
-    sequence_layer_warrant1_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_warrant1_input_kb")
-    sequence_layer_reason_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_reason_input_kb")
-    sequence_layer_claim_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_claim_input_kb")
-
     # now define embedded layers of the input
-    embedded_layer_warrant0_input = Embedding(embeddings.shape[0], embeddings.shape[1], input_length=max_len, weights=[embeddings], mask_zero=True)(sequence_layer_warrant0_input)
-    embedded_layer_warrant1_input = Embedding(embeddings.shape[0], embeddings.shape[1], input_length=max_len, weights=[embeddings], mask_zero=True)(sequence_layer_warrant1_input)
-    embedded_layer_reason_input = Embedding(embeddings.shape[0], embeddings.shape[1], input_length=max_len, weights=[embeddings], mask_zero=True)(sequence_layer_reason_input)
-    embedded_layer_claim_input = Embedding(embeddings.shape[0], embeddings.shape[1], input_length=max_len, weights=[embeddings], mask_zero=True)(sequence_layer_claim_input)
-    embedded_layer_debate_input = Embedding(embeddings.shape[0], embeddings.shape[1], input_length=max_len, weights=[embeddings], mask_zero=True)(sequence_layer_debate_input)
+    word_emb_layer = Embedding(embeddings.shape[0], embeddings.shape[1], input_length=max_len, weights=[embeddings], mask_zero=True)
+    embedded_layer_warrant0_input = word_emb_layer(sequence_layer_warrant0_input)
+    embedded_layer_warrant1_input = word_emb_layer(sequence_layer_warrant1_input)
+    embedded_layer_reason_input = word_emb_layer(sequence_layer_reason_input)
+    embedded_layer_claim_input = word_emb_layer(sequence_layer_claim_input)
+    embedded_layer_debate_input = word_emb_layer(sequence_layer_debate_input)
 
-    embedded_layer_warrant0_input_kb = Embedding(kb_embeddings.shape[0], kb_embeddings.shape[1], input_length=max_len, weights=[kb_embeddings], mask_zero=True)(sequence_layer_warrant0_input_kb)
-    embedded_layer_warrant1_input_kb = Embedding(kb_embeddings.shape[0], kb_embeddings.shape[1], input_length=max_len, weights=[kb_embeddings], mask_zero=True)(sequence_layer_warrant1_input_kb)
-    embedded_layer_reason_input_kb = Embedding(kb_embeddings.shape[0], kb_embeddings.shape[1], input_length=max_len, weights=[kb_embeddings], mask_zero=True)(sequence_layer_reason_input_kb)
-    embedded_layer_claim_input_kb = Embedding(kb_embeddings.shape[0], kb_embeddings.shape[1], input_length=max_len, weights=[kb_embeddings], mask_zero=True)(sequence_layer_claim_input_kb)
+    if kb_embeddings is not None :
+        sequence_layer_warrant0_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_warrant0_input_kb")
+        sequence_layer_warrant1_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_warrant1_input_kb")
+        sequence_layer_reason_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_reason_input_kb")
+        sequence_layer_claim_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_claim_input_kb")
 
-    embedded_layer_warrant0_input = concatenate([embedded_layer_warrant0_input, embedded_layer_warrant0_input_kb])
-    embedded_layer_warrant1_input = concatenate([embedded_layer_warrant1_input, embedded_layer_warrant1_input_kb])
-    embedded_layer_reason_input = concatenate([embedded_layer_reason_input, embedded_layer_reason_input_kb])
-    embedded_layer_claim_input = concatenate([embedded_layer_claim_input, embedded_layer_claim_input_kb])
+        kb_emb_layer = Embedding(kb_embeddings.shape[0], kb_embeddings.shape[1], input_length=max_len, weights=[kb_embeddings], mask_zero=True)
+        embedded_layer_warrant0_input_kb = kb_emb_layer(sequence_layer_warrant0_input_kb)
+        embedded_layer_warrant1_input_kb = kb_emb_layer(sequence_layer_warrant1_input_kb)
+        embedded_layer_reason_input_kb = kb_emb_layer(sequence_layer_reason_input_kb)
+        embedded_layer_claim_input_kb = kb_emb_layer(sequence_layer_claim_input_kb)
+
+    if fn_embeddings is not None :
+        sequence_layer_warrant0_input_fn = Input(shape=(max_len,), dtype='int32', name="sequence_layer_warrant0_input_fn")
+        sequence_layer_warrant1_input_fn = Input(shape=(max_len,), dtype='int32', name="sequence_layer_warrant1_input_fn")
+        sequence_layer_reason_input_fn = Input(shape=(max_len,), dtype='int32', name="sequence_layer_reason_input_fn")
+        sequence_layer_claim_input_fn = Input(shape=(max_len,), dtype='int32', name="sequence_layer_claim_input_fn")
+
+        fn_emb_layer = Embedding(fn_embeddings.shape[0], fn_embeddings.shape[1], input_length=max_len, weights=[fn_embeddings], mask_zero=True)
+        embedded_layer_warrant0_input_fn = fn_emb_layer(sequence_layer_warrant0_input_fn)
+        embedded_layer_warrant1_input_fn = fn_emb_layer(sequence_layer_warrant1_input_fn)
+        embedded_layer_reason_input_fn = fn_emb_layer(sequence_layer_reason_input_fn)
+        embedded_layer_claim_input_fn = fn_emb_layer(sequence_layer_claim_input_fn)
+
+    embedded_layer_warrant0_input = concatenate([embedded_layer_warrant0_input,
+                                                 *((embedded_layer_warrant0_input_kb,) if kb_embeddings is not None  else ()),
+                                                 *((embedded_layer_warrant0_input_fn,) if fn_embeddings is not None  else ()),
+                                                 ])
+    embedded_layer_warrant1_input = concatenate([embedded_layer_warrant1_input,
+                                                 *((embedded_layer_warrant1_input_kb,) if kb_embeddings is not None  else ()),
+                                                 *((embedded_layer_warrant1_input_fn,) if fn_embeddings is not None  else ())
+                                                 ])
+    embedded_layer_reason_input = concatenate([embedded_layer_reason_input,
+                                               *((embedded_layer_reason_input_kb,) if kb_embeddings is not None  else ()),
+                                               *((embedded_layer_reason_input_fn,) if fn_embeddings is not None  else ())
+                                               ])
+    embedded_layer_claim_input = concatenate([embedded_layer_claim_input,
+                                              *((embedded_layer_claim_input_kb,) if kb_embeddings is not None  else ()),
+                                              *((embedded_layer_claim_input_fn,) if fn_embeddings is not None  else ())
+                                              ])
 
     bidi_lstm_layer_warrant0 = Bidirectional(LSTM(lstm_size, return_sequences=True), name='BiDiLSTM-W0')(embedded_layer_warrant0_input)
     bidi_lstm_layer_warrant1 = Bidirectional(LSTM(lstm_size, return_sequences=True), name='BiDiLSTM-W1')(embedded_layer_warrant1_input)
@@ -209,10 +242,17 @@ def get_attention_lstm_intra_warrant_kbembeddings(word_index_to_embeddings_map, 
         sequence_layer_reason_input,
         sequence_layer_claim_input,
         sequence_layer_debate_input,
-        sequence_layer_warrant0_input_kb,
-        sequence_layer_warrant1_input_kb,
-        sequence_layer_reason_input_kb,
-        sequence_layer_claim_input_kb
+        *(
+            (sequence_layer_warrant0_input_kb,
+            sequence_layer_warrant1_input_kb,
+            sequence_layer_reason_input_kb,
+            sequence_layer_claim_input_kb) if kb_embeddings is not None else ()),
+        *(
+            (sequence_layer_warrant0_input_fn,
+             sequence_layer_warrant1_input_fn,
+             sequence_layer_reason_input_fn,
+             sequence_layer_claim_input_fn) if fn_embeddings is not None else ())
+
     ], output=output_layer)
     model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
 

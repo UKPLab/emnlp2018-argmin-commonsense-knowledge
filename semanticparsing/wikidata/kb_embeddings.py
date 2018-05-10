@@ -8,12 +8,12 @@ def load_kb_embeddings(path_to_folder):
     """
     Loads pre-trained KB embeddings from the specified path.
 
-    @return (embeddings as an numpy array, relation embeddings, entity2idx, relation2idx)
+    @return (embeddings as an numpy array, entity2idx)
     """
 
     entity2idx = {}
     allowed_indices = set()
-    with open("../data/entity2id.filtered.txt", 'r') as f:
+    with open("data/entity2id.filtered.txt", 'r') as f:
         f.readline()
         for l in f.readlines():
             k, v, idx = tuple(l.strip().split("\t"))

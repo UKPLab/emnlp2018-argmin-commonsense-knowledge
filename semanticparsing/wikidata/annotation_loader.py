@@ -8,11 +8,12 @@ def extract_indices(sent: Dict, entity_to_indices_map: Dict) -> List:
                         if len(e['linkings']) > 0 and e['drop_score'] < 0.9}
 
     # now convert tokens to indices; set to 1 for OOV
-    word_indices_list = [entity_to_indices_map.get(token_entity_map[i], 0) if i in token_entity_map else 1 for i in range(len(sent['tagged']))]
+    word_indices_list = [entity_to_indices_map.get(token_entity_map[i], 1) if i in token_entity_map else 0
+                         for i in range(len(sent['tagged']))]
     return word_indices_list
 
 
-def load_single_file(file_name: str, entity_to_indices_map: Dict, nb_words: int = None) -> Tuple:
+def load_single_file(file_name: str, entity_to_indices_map: Dict) -> Tuple:
     with open(file_name) as f:
         data_annotations = json.load(f)
 
@@ -20,6 +21,3 @@ def load_single_file(file_name: str, entity_to_indices_map: Dict, nb_words: int 
     warrant0_list, warrant1_list, reason_list, claim_list = tuple(zip(*data_annotations))
 
     return warrant0_list, warrant1_list, reason_list, claim_list
-
-
-

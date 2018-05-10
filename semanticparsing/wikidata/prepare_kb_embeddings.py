@@ -1,3 +1,7 @@
+"""
+The knowledge base embedding matrix is extremely large. We preprocess teh entity list to load only relevant entities.
+"""
+
 import json
 
 
