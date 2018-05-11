@@ -145,6 +145,7 @@ def get_attention_lstm_intra_warrant_world_knowledge(word_index_to_embeddings_ma
                                                      max_len,
                                                      rich_context=False,
                                                      lstm_size=32,
+                                                     warrant_lstm_size=32,
                                                      dropout=0.1,
                                                      kb_embeddings=None,
                                                      fn_embeddings=None):
@@ -190,22 +191,23 @@ def get_attention_lstm_intra_warrant_world_knowledge(word_index_to_embeddings_ma
         embedded_layer_reason_input_fn = fn_emb_layer(sequence_layer_reason_input_fn)
         embedded_layer_claim_input_fn = fn_emb_layer(sequence_layer_claim_input_fn)
 
-    embedded_layer_warrant0_input = concatenate([embedded_layer_warrant0_input,
+    if fn_embeddings is not None or kb_embeddings is not None:
+        embedded_layer_warrant0_input = concatenate([embedded_layer_warrant0_input,
                                                  *((embedded_layer_warrant0_input_kb,) if kb_embeddings is not None  else ()),
                                                  *((embedded_layer_warrant0_input_fn,) if fn_embeddings is not None  else ()),
                                                  ])
-    embedded_layer_warrant1_input = concatenate([embedded_layer_warrant1_input,
-                                                 *((embedded_layer_warrant1_input_kb,) if kb_embeddings is not None  else ()),
-                                                 *((embedded_layer_warrant1_input_fn,) if fn_embeddings is not None  else ())
-                                                 ])
-    embedded_layer_reason_input = concatenate([embedded_layer_reason_input,
-                                               *((embedded_layer_reason_input_kb,) if kb_embeddings is not None  else ()),
-                                               *((embedded_layer_reason_input_fn,) if fn_embeddings is not None  else ())
-                                               ])
-    embedded_layer_claim_input = concatenate([embedded_layer_claim_input,
-                                              *((embedded_layer_claim_input_kb,) if kb_embeddings is not None  else ()),
-                                              *((embedded_layer_claim_input_fn,) if fn_embeddings is not None  else ())
-                                              ])
+        embedded_layer_warrant1_input = concatenate([embedded_layer_warrant1_input,
+                                                     *((embedded_layer_warrant1_input_kb,) if kb_embeddings is not None  else ()),
+                                                     *((embedded_layer_warrant1_input_fn,) if fn_embeddings is not None  else ())
+                                                     ])
+        embedded_layer_reason_input = concatenate([embedded_layer_reason_input,
+                                                   *((embedded_layer_reason_input_kb,) if kb_embeddings is not None  else ()),
+                                                   *((embedded_layer_reason_input_fn,) if fn_embeddings is not None  else ())
+                                                   ])
+        embedded_layer_claim_input = concatenate([embedded_layer_claim_input,
+                                                  *((embedded_layer_claim_input_kb,) if kb_embeddings is not None  else ()),
+                                                  *((embedded_layer_claim_input_fn,) if fn_embeddings is not None  else ())
+                                                  ])
 
     bidi_lstm_layer_warrant0 = Bidirectional(LSTM(lstm_size, return_sequences=True), name='BiDiLSTM-W0')(embedded_layer_warrant0_input)
     bidi_lstm_layer_warrant1 = Bidirectional(LSTM(lstm_size, return_sequences=True), name='BiDiLSTM-W1')(embedded_layer_warrant1_input)
@@ -226,14 +228,14 @@ def get_attention_lstm_intra_warrant_world_knowledge(word_index_to_embeddings_ma
         attention_vector_for_w0 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant1]))
         attention_vector_for_w1 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant0]))
 
-    attention_warrant0 = AttentionLSTM(lstm_size, attention_vector_for_w0)(bidi_lstm_layer_warrant0)
-    attention_warrant1 = AttentionLSTM(lstm_size, attention_vector_for_w1)(bidi_lstm_layer_warrant1)
+    attention_warrant0 = AttentionLSTM(warrant_lstm_size, attention_vector_for_w0)(bidi_lstm_layer_warrant0)
+    attention_warrant1 = AttentionLSTM(warrant_lstm_size, attention_vector_for_w1)(bidi_lstm_layer_warrant1)
 
     # concatenate them
     dropout_layer = Dropout(dropout)(add([attention_warrant0, attention_warrant1]))
 
     # and add one extra layer with ReLU
-    dense1 = Dense(int(lstm_size / 2), activation='relu')(dropout_layer)
+    dense1 = Dense(int(warrant_lstm_size / 2), activation='relu')(dropout_layer)
     output_layer = Dense(1, activation='sigmoid')(dense1)
 
     model = Model([

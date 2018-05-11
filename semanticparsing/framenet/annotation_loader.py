@@ -7,7 +7,7 @@ def extract_indices(sent: Dict, frame_to_indices_map: Dict) -> List:
     token_frame_map = {f[2]: f[0] for f in sent}
 
     # now convert tokens to indices; set to 1 for OOV
-    word_indices_list = [frame_to_indices_map.get(token_frame_map[i], 1) if i in token_frame_map else 0
+    word_indices_list = [frame_to_indices_map.get(token_frame_map[i], 1) if i in token_frame_map else 2
                          for i in range(100)]
     return word_indices_list
 

@@ -15,14 +15,6 @@ from semanticparsing.framenet import fn_embeddings, annotation_loader as FN
 
 max_len = 100  # padding length
 
-optimization_space = {
-    'dropout': hy.hp.uniform('dropout', .0, .5),
-    'lstm_size': hy.hp.choice('lstm_size', [2**x for x in range(4, 9)]),
-    'batch_size': hy.hp.choice('batch_size', [2**x for x in range(3, 8)]),
-}
-
-trials_counter = 0
-
 
 def get_predicted_labels(predicted_probabilities):
     """
@@ -58,7 +50,7 @@ def __main__():
     word_to_indices_map, word_index_to_embeddings_map = \
         vocabulary_embeddings_extractor.load_cached_vocabulary_and_embeddings(embeddings_cache_file)
 
-    entity_to_indices_map, entity_index_to_embeddings_map = kb_embeddings.load_kb_embeddings("/home/sorokin/entity-linking/data/WikidataEmb/dec_17_100/")
+    entity_to_indices_map, entity_index_to_embeddings_map = kb_embeddings.load_kb_embeddings(current_dir + "/../entity-linking/data/WikidataEmb/dec_17_100/")
     frame_to_indices_map, frame_index_to_embeddings_map = fn_embeddings.load_fn_embeddings(current_dir + "/data/frameEmbeddings/dict_frame_to_emb_100dim_wsb_npArray.pkl")
 
     (train_instance_id_list, train_warrant0_list, train_warrant1_list, train_correct_label_w0_or_w1_list,
@@ -111,77 +103,58 @@ def __main__():
     assert train_warrant0_list.shape == train_warrant1_list.shape == train_reason_list.shape == train_claim_list.shape \
            == train_debate_meta_data_list.shape == train_reason_entities_list.shape, train_claim_entities_list.shape
 
-    trials = hy.Trials()
-    atexit.register(lambda: wrap_up_optimization(trials))
+    lstm_size = 64
+    warrant_lstm_size = 64
+    dropout = 0.25  # empirically tested on dev set
+    nb_epoch = 25
+    batch_size = 16
 
-    def train(sampled_parameters):
-        global trials_counter
-        lstm_size = sampled_parameters['lstm_size']  #64
-        dropout = sampled_parameters['dropout']  #0.9  # empirically tested on dev set
-        nb_epoch = 25
-        batch_size = sampled_parameters['batch_size']  #32
+    print(f'Training: LSTM {lstm_size}, Dropout {dropout}, Batch {batch_size}')
 
-        print(f'Trial: {trials_counter}, Trying: LSTM {lstm_size}, Dropout {dropout}, Batch {batch_size}')
-        trials_counter += 1
+    accs = []
+    for i in range(1, 11):
+        print("Run: ", i)
 
-        accs = []
-        for i in range(1, 4):
-            print("Run: ", i)
+        np.random.seed(12345 + i)  # for reproducibility
 
-            np.random.seed(12345 + i)  # for reproducibility
+        model = get_attention_lstm_intra_warrant_world_knowledge(word_index_to_embeddings_map, max_len, rich_context=True,
+                                                              dropout=dropout, lstm_size=lstm_size,
+                                                                 warrant_lstm_size=warrant_lstm_size,
+                                                                 kb_embeddings=entity_index_to_embeddings_map,
+                                                                 fn_embeddings=None)
+        model.fit(
+            {'sequence_layer_warrant0_input': train_warrant0_list, 'sequence_layer_warrant1_input': train_warrant1_list,
+             'sequence_layer_reason_input': train_reason_list, 'sequence_layer_claim_input': train_claim_list,
+             'sequence_layer_debate_input': train_debate_meta_data_list,
+             'sequence_layer_warrant0_input_kb': train_warrant0_entities_list, 'sequence_layer_warrant1_input_kb': train_warrant1_entities_list,
+             'sequence_layer_reason_input_kb': train_reason_entities_list, 'sequence_layer_claim_input_kb': train_claim_entities_list,
+             'sequence_layer_warrant0_input_fn': train_warrant0_frames_list, 'sequence_layer_warrant1_input_fn': train_warrant1_frames_list,
+             'sequence_layer_reason_input_fn': train_reason_frames_list, 'sequence_layer_claim_input_fn': train_claim_frames_list},
+            train_correct_label_w0_or_w1_list, epochs=nb_epoch, batch_size=batch_size, verbose=verbose,
+            validation_split=0.1,
+            callbacks=[callbacks.EarlyStopping(monitor="val_acc", patience=2, verbose=1),
+                       callbacks.ModelCheckpoint("trainedmodels/model.kerasmodel",
+                                                 monitor='val_acc', verbose=1, save_best_only=True)])
 
-            model = get_attention_lstm_intra_warrant_world_knowledge(word_index_to_embeddings_map, max_len, rich_context=True,
-                                                                  dropout=dropout, lstm_size=lstm_size,
-                                                                     kb_embeddings=entity_index_to_embeddings_map,
-                                                                     fn_embeddings=frame_index_to_embeddings_map)
-            model.fit(
-                {'sequence_layer_warrant0_input': train_warrant0_list, 'sequence_layer_warrant1_input': train_warrant1_list,
-                 'sequence_layer_reason_input': train_reason_list, 'sequence_layer_claim_input': train_claim_list,
-                 'sequence_layer_debate_input': train_debate_meta_data_list,
-                 'sequence_layer_warrant0_input_kb': train_warrant0_entities_list, 'sequence_layer_warrant1_input_kb': train_warrant1_entities_list,
-                 'sequence_layer_reason_input_kb': train_reason_entities_list, 'sequence_layer_claim_input_kb': train_claim_entities_list,
-                 'sequence_layer_warrant0_input_fn': train_warrant0_frames_list, 'sequence_layer_warrant1_input_fn': train_warrant1_frames_list,
-                 'sequence_layer_reason_input_fn': train_reason_frames_list, 'sequence_layer_claim_input_fn': train_claim_frames_list},
-                train_correct_label_w0_or_w1_list, epochs=nb_epoch, batch_size=batch_size, verbose=verbose,
-                validation_split=0.1,
-                callbacks=[callbacks.EarlyStopping(monitor="val_acc", patience=2, verbose=1),
-                           callbacks.ModelCheckpoint("trainedmodels/model.kerasmodel",
-                                                     monitor='val_acc', verbose=1, save_best_only=True)])
+        model.load_weights("trainedmodels/model.kerasmodel")
+        # model predictions
+        predicted_probabilities_dev = model.predict(
+            {'sequence_layer_warrant0_input': dev_warrant0_list, 'sequence_layer_warrant1_input': dev_warrant1_list,
+             'sequence_layer_reason_input': dev_reason_list, 'sequence_layer_claim_input': dev_claim_list,
+             'sequence_layer_debate_input': dev_debate_meta_data_list,
+             'sequence_layer_warrant0_input_kb': dev_warrant0_entities_list, 'sequence_layer_warrant1_input_kb': dev_warrant1_entities_list,
+             'sequence_layer_reason_input_kb': dev_reason_entities_list, 'sequence_layer_claim_input_kb': dev_claim_entities_list,
+             'sequence_layer_warrant0_input_fn': dev_warrant0_frames_list, 'sequence_layer_warrant1_input_fn': dev_warrant1_frames_list,
+             'sequence_layer_reason_input_fn': dev_reason_frames_list, 'sequence_layer_claim_input_fn': dev_claim_frames_list},
+            batch_size=batch_size, verbose=1)
 
-            model.load_weights("trainedmodels/model.kerasmodel")
-            # model predictions
-            predicted_probabilities_dev = model.predict(
-                {'sequence_layer_warrant0_input': dev_warrant0_list, 'sequence_layer_warrant1_input': dev_warrant1_list,
-                 'sequence_layer_reason_input': dev_reason_list, 'sequence_layer_claim_input': dev_claim_list,
-                 'sequence_layer_debate_input': dev_debate_meta_data_list,
-                 'sequence_layer_warrant0_input_kb': dev_warrant0_entities_list, 'sequence_layer_warrant1_input_kb': dev_warrant1_entities_list,
-                 'sequence_layer_reason_input_kb': dev_reason_entities_list, 'sequence_layer_claim_input_kb': dev_claim_entities_list,
-                 'sequence_layer_warrant0_input_fn': dev_warrant0_frames_list, 'sequence_layer_warrant1_input_fn': dev_warrant1_frames_list,
-                 'sequence_layer_reason_input_fn': dev_reason_frames_list, 'sequence_layer_claim_input_fn': dev_claim_frames_list},
-                batch_size=batch_size, verbose=1)
+        predicted_labels_dev = get_predicted_labels(predicted_probabilities_dev)
 
-            predicted_labels_dev = get_predicted_labels(predicted_probabilities_dev)
-
-            acc_dev = np.sum(np.asarray(dev_correct_label_w0_or_w1_list) == predicted_labels_dev) / len(dev_correct_label_w0_or_w1_list)
-            print('Dev accuracy:', acc_dev)
-            accs.append(acc_dev)
-        print(f"Acc dev: {accs}")
-        acc = np.average(accs)
-        return {'acc': acc, 'accs': accs, 'loss': 1 - acc, 'status': hy.STATUS_OK, 'sampled.parameters': sampled_parameters}
-
-    hy.fmin(train,
-            optimization_space,
-            algo=hy.rand.suggest,
-            max_evals=50,
-            trials=trials, verbose=1)
-
-
-def wrap_up_optimization(trials):
-    if len(trials.trials) > 0:
-        print("Optimization finished, best trail: {}".format(trials.best_trial))
-        print("Best parameters: {}".format(trials.best_trial['result']['sampled.parameters']))
-        with open("trials.json", 'w') as out:
-            json.dump([(t['misc']['vals'], t['result']) for t in trials.trials], out)
+        acc_dev = np.sum(np.asarray(dev_correct_label_w0_or_w1_list) == predicted_labels_dev) / len(dev_correct_label_w0_or_w1_list)
+        print('Dev accuracy:', acc_dev)
+        accs.append(acc_dev)
+    acc = np.average(accs)
+    print(f"Acc dev: {accs} -> {acc}")
 
 
 def print_error_analysis_dev(ids: set) -> None:

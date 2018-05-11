@@ -2,6 +2,7 @@ import numpy as np
 
 all_zeroes = "ALL_ZERO"
 unknown_el = "_UNKNOWN"
+no_annotation = "_NO_ANNOTATION"
 
 
 def load_kb_embeddings(path_to_folder):
@@ -17,7 +18,7 @@ def load_kb_embeddings(path_to_folder):
         f.readline()
         for l in f.readlines():
             k, v, idx = tuple(l.strip().split("\t"))
-            entity2idx[k] = int(idx) + 2
+            entity2idx[k] = int(idx) + 3
             allowed_indices.add(int(v))
 
     embeddings = []
@@ -31,9 +32,11 @@ def load_kb_embeddings(path_to_folder):
 
     entity2idx[all_zeroes] = 0  # 0 is reserved for padding
     entity2idx[unknown_el] = 1  # 1 is reserved for OOV
+    entity2idx[unknown_el] = 2  # 2 is reserved for no annotation tokens
     embedding_size = len(embeddings[0])
     vector_oov = 2 * 0.1 * np.random.rand(embedding_size) - 0.1
-    embeddings = np.asarray([[0.0]*embedding_size, vector_oov] + embeddings, dtype='float32')
+    vector_na = 2 * 0.1 * np.random.rand(embedding_size) - 0.1
+    embeddings = np.asarray([[0.0]*embedding_size, vector_oov, vector_na] + embeddings, dtype='float32')
 
     print("KB embeddings loaded: {}".format(embeddings.shape))
 

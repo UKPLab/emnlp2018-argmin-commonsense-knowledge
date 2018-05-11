@@ -24,13 +24,15 @@ corenlp_properties = {
 
 EL.candidate_retrieval.entity_linking_p['max.match.diff'] = 0
 
-EL.mention_extraction.np_parser = EL.mention_extraction.NgramNpParser(exclude_pos={".", "ORDINAL", "TIME", "PERCENT"},
+EL.mention_extraction.np_parser = EL.mention_extraction.NgramNpParser(
+                          exclude_pos={".", "ORDINAL", "TIME", "PERCENT", "NUMBER"},
                           exclude_if_first={"WDT", "WP", "WP$", "WRB", "VBZ", "VB", "VBP"},
                           exclude_prefix={"IN", "DT", "CC", "POS"},
                           exclude_suffix={"IN", "DT", "CC", "JJ", "RB", "JJR", "JJS", "RBR", "RBS"},
                           exclude_alone={"IN", "DT", "PDT", "POS", "PRP", "PRP$", "CC", "TO",
                                          "VBZ", "VBD", "VBP", "VB", "VBG", "VBN",
-                                         "JJ", "RB", "JJR", "JJS", "RBR", "RBS"
+                                         "JJ", "RB", "JJR", "JJS", "RBR", "RBS",
+                                         "MD", "WDT", "WP", "WP$", "WRB"
                                          })
 
 
@@ -38,9 +40,10 @@ EL.mention_extraction.np_parser = EL.mention_extraction.NgramNpParser(exclude_po
 @click.argument('path_to_file')
 def apply(path_to_file):
 
-    entitylinker = EL.MLLinker(path_to_model="../entity-linking/trainedmodels/FeatureModel_SimplifiedVCG.torchweights",
+    entitylinker = EL.MLLinker(path_to_model="../entity-linking/trainedmodels/VectorModel_137.torchweights",
                                confidence=0.01,
-                               num_candidates=3)
+                               num_candidates=3,
+                               max_mention_len=3)
 
     with open(path_to_file) as f:
         input_data = [l.strip().split("\t") for l in f.readlines()][1:]
@@ -58,7 +61,7 @@ def apply(path_to_file):
                 e['linkings'] = [(l.get('kbID'), l.get('label')) for l in e['linkings']]
             output_per_story.append(sent)
         output_data.append(output_per_story)
-    with open("data/test_output.json", "w") as out:
+    with open("data/dev_output_11_05.json", "w") as out:
         json.dump(output_data, out, sort_keys=True, indent=4, cls=SentenceEncoder)
 
 
