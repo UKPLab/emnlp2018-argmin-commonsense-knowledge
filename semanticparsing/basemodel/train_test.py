@@ -1,15 +1,16 @@
 import json
 import os
 
-import atexit
 import numpy as np
 from keras.preprocessing import sequence
 from keras import callbacks
 
-import hyperopt as hy
 
 from semanticparsing.basemodel import data_loader, vocabulary_embeddings_extractor
-from semanticparsing.basemodel.models import get_attention_lstm, get_attention_lstm_intra_warrant, get_attention_lstm_intra_warrant_world_knowledge
+from semanticparsing.basemodel.models import get_attention_lstm, \
+    get_attention_lstm_intra_warrant, \
+     get_attention_lstm_intra_warrant_world_knowledge, \
+    get_attention_lstm_intra_warrant_kb_pooled
 from semanticparsing.wikidata import kb_embeddings, annotation_loader as WD
 from semanticparsing.framenet import fn_embeddings, annotation_loader as FN
 
@@ -104,12 +105,12 @@ def __main__():
            == train_debate_meta_data_list.shape == train_reason_entities_list.shape, train_claim_entities_list.shape
 
     lstm_size = 64
-    warrant_lstm_size = 64
-    dropout = 0.25  # empirically tested on dev set
+    warrant_lstm_size = 256
+    dropout = 0.4  # empirically tested on dev set
     nb_epoch = 25
     batch_size = 16
 
-    print(f'Training: LSTM {lstm_size}, Dropout {dropout}, Batch {batch_size}')
+    print(f'Training: LSTM {lstm_size}, Warrant LSTM {warrant_lstm_size}, Dropout {dropout}, Batch {batch_size}')
 
     accs = []
     for i in range(1, 11):
@@ -117,11 +118,11 @@ def __main__():
 
         np.random.seed(12345 + i)  # for reproducibility
 
-        model = get_attention_lstm_intra_warrant_world_knowledge(word_index_to_embeddings_map, max_len, rich_context=True,
+        model = get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map, max_len, rich_context=True,
                                                               dropout=dropout, lstm_size=lstm_size,
                                                                  warrant_lstm_size=warrant_lstm_size,
-                                                                 kb_embeddings=entity_index_to_embeddings_map,
-                                                                 fn_embeddings=None)
+                                                                 # kb_embeddings=entity_index_to_embeddings_map,
+                                                                 fn_embeddings=frame_index_to_embeddings_map)
         model.fit(
             {'sequence_layer_warrant0_input': train_warrant0_list, 'sequence_layer_warrant1_input': train_warrant1_list,
              'sequence_layer_reason_input': train_reason_list, 'sequence_layer_claim_input': train_claim_list,

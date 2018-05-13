@@ -9,7 +9,8 @@ from keras import callbacks
 import hyperopt as hy
 
 from semanticparsing.basemodel import data_loader, vocabulary_embeddings_extractor
-from semanticparsing.basemodel.models import get_attention_lstm, get_attention_lstm_intra_warrant, get_attention_lstm_intra_warrant_world_knowledge
+from semanticparsing.basemodel.models import get_attention_lstm, get_attention_lstm_intra_warrant, \
+    get_attention_lstm_intra_warrant_world_knowledge, get_attention_lstm_intra_warrant_kb_pooled
 from semanticparsing.wikidata import kb_embeddings, annotation_loader as WD
 from semanticparsing.framenet import fn_embeddings, annotation_loader as FN
 
@@ -123,7 +124,7 @@ def __main__():
         nb_epoch = 25
         batch_size = sampled_parameters['batch_size']  #32
 
-        print(f'Trial: {trials_counter}, Trying: LSTM {lstm_size}, Dropout {dropout}, Batch {batch_size}')
+        print(f'Trial: {trials_counter}, Trying: LSTM {lstm_size}, Warrant LSTM {warrant_lstm_size}, Dropout {dropout}, Batch {batch_size}')
         trials_counter += 1
 
         accs = []
@@ -132,7 +133,7 @@ def __main__():
 
             np.random.seed(12345 + i)  # for reproducibility
 
-            model = get_attention_lstm_intra_warrant_world_knowledge(word_index_to_embeddings_map, max_len, rich_context=True,
+            model = get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map, max_len, rich_context=True,
                                                                   dropout=dropout, lstm_size=lstm_size,
                                                                      warrant_lstm_size=warrant_lstm_size,
                                                                      kb_embeddings=None,
@@ -168,8 +169,8 @@ def __main__():
             acc_dev = np.sum(np.asarray(dev_correct_label_w0_or_w1_list) == predicted_labels_dev) / len(dev_correct_label_w0_or_w1_list)
             print('Dev accuracy:', acc_dev)
             accs.append(acc_dev)
-        print(f"Acc dev: {accs}")
         acc = np.average(accs)
+        print(f"Acc dev: {accs} -> {acc}")
         return {'acc': acc, 'accs': accs, 'loss': 1 - acc, 'status': hy.STATUS_OK, 'sampled.parameters': sampled_parameters}
 
     hy.fmin(train,
