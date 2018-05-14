@@ -56,7 +56,7 @@ def __main__():
 
     (train_instance_id_list, train_warrant0_list, train_warrant1_list, train_correct_label_w0_or_w1_list,
      train_reason_list, train_claim_list, train_debate_meta_data_list) = \
-        data_loader.load_single_file(current_dir + '/data/arg-comprehension-full/train-full.txt', word_to_indices_map)
+        data_loader.load_single_file(current_dir + '/data/arg-comprehension/train-w-swap.tsv', word_to_indices_map)
 
     train_warrant0_entities_list, train_warrant1_entities_list, train_reason_entities_list, train_claim_entities_list = \
         WD.load_single_file(current_dir + '/data/data-annotations/train_entitylinking.json', entity_to_indices_map)
@@ -102,11 +102,11 @@ def __main__():
          dev_warrant0_frames_list, dev_warrant1_frames_list, dev_reason_frames_list, dev_claim_frames_list)]
 
     assert train_warrant0_list.shape == train_warrant1_list.shape == train_reason_list.shape == train_claim_list.shape \
-           == train_debate_meta_data_list.shape == train_reason_entities_list.shape, train_claim_entities_list.shape
+           == train_debate_meta_data_list.shape
 
-    lstm_size = 64
-    warrant_lstm_size = 256
-    dropout = 0.4  # empirically tested on dev set
+    lstm_size = 32
+    warrant_lstm_size = 32
+    dropout = 0.25  # empirically tested on dev set
     nb_epoch = 25
     batch_size = 16
 
@@ -118,11 +118,12 @@ def __main__():
 
         np.random.seed(12345 + i)  # for reproducibility
 
-        model = get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map, max_len, rich_context=True,
+        model = get_attention_lstm_intra_warrant(word_index_to_embeddings_map, max_len, rich_context=True,
                                                               dropout=dropout, lstm_size=lstm_size,
-                                                                 warrant_lstm_size=warrant_lstm_size,
+                                                                 # warrant_lstm_size=warrant_lstm_size,
                                                                  # kb_embeddings=entity_index_to_embeddings_map,
-                                                                 fn_embeddings=frame_index_to_embeddings_map)
+                                                                 # fn_embeddings=frame_index_to_embeddings_map
+                                                 )
         model.fit(
             {'sequence_layer_warrant0_input': train_warrant0_list, 'sequence_layer_warrant1_input': train_warrant1_list,
              'sequence_layer_reason_input': train_reason_list, 'sequence_layer_claim_input': train_claim_list,
@@ -134,10 +135,11 @@ def __main__():
             train_correct_label_w0_or_w1_list, epochs=nb_epoch, batch_size=batch_size, verbose=verbose,
             validation_split=0.1,
             callbacks=[callbacks.EarlyStopping(monitor="val_acc", patience=2, verbose=1),
-                       callbacks.ModelCheckpoint("trainedmodels/model.kerasmodel",
+                       callbacks.ModelCheckpoint(f"trainedmodels/model_{i}.kerasmodel",
                                                  monitor='val_acc', verbose=1, save_best_only=True)])
 
-        model.load_weights("trainedmodels/model.kerasmodel")
+        print(f"Load model from: trainedmodels/model_{i}.kerasmodel")
+        model.load_weights(f"trainedmodels/model_{i}.kerasmodel")
         # model predictions
         predicted_probabilities_dev = model.predict(
             {'sequence_layer_warrant0_input': dev_warrant0_list, 'sequence_layer_warrant1_input': dev_warrant1_list,
