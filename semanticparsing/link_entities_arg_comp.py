@@ -5,8 +5,6 @@ import torch
 
 PATH_EL = "../entity-linking/"
 sys.path.insert(0, PATH_EL)
-PATH_RELEXT = "../relation-extraction/relation_extraction/"
-sys.path.insert(0, PATH_RELEXT)
 
 import click
 import tqdm
@@ -43,7 +41,7 @@ def apply(path_to_file):
     entitylinker = EL.MLLinker(path_to_model="../entity-linking/trainedmodels/VectorModel_137.torchweights",
                                confidence=0.01,
                                num_candidates=3,
-                               max_mention_len=3)
+                               max_mention_len=2)
 
     with open(path_to_file) as f:
         input_data = [l.strip().split("\t") for l in f.readlines()][1:]
