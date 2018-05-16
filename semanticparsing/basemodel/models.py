@@ -6,7 +6,7 @@ import keras
 import numpy as np
 from keras.engine import Input
 from keras.engine import Model
-from keras.layers.merge import concatenate, add
+from keras.layers.merge import concatenate, add, multiply
 from keras.layers import Dense, Dropout, Embedding, LSTM, Bidirectional, Lambda
 
 from semanticparsing.basemodel.attention_lstm import AttentionLSTM
@@ -272,6 +272,13 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
     # converting embeddings to numpy 2d array: shape = (vocabulary_size, 300)
     embeddings = np.asarray([np.array(x, dtype=np.float32) for x in word_index_to_embeddings_map.values()])
 
+    # max-pooling
+    max_pool_lambda_layer = Lambda(lambda x: keras.backend.max(x, axis=1, keepdims=False), output_shape=lambda x: (x[0], x[2]))
+    max_pool_lambda_layer.supports_masking = True
+    # sum-pooling
+    sum_pool_lambda_layer = Lambda(lambda x: keras.backend.sum(x, axis=1, keepdims=False), output_shape=lambda x: (x[0], x[2]))
+    sum_pool_lambda_layer.supports_masking = True
+
     # define basic four input layers - for warrant0, warrant1, reason, claim
     sequence_layer_warrant0_input = Input(shape=(max_len,), dtype='int32', name="sequence_layer_warrant0_input")
     sequence_layer_warrant1_input = Input(shape=(max_len,), dtype='int32', name="sequence_layer_warrant1_input")
@@ -287,7 +294,7 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
     embedded_layer_claim_input = word_emb_layer(sequence_layer_claim_input)
     embedded_layer_debate_input = word_emb_layer(sequence_layer_debate_input)
 
-    if kb_embeddings is not None :
+    if kb_embeddings is not None:
         sequence_layer_warrant0_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_warrant0_input_kb")
         sequence_layer_warrant1_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_warrant1_input_kb")
         sequence_layer_reason_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_reason_input_kb")
@@ -298,6 +305,10 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
         embedded_layer_warrant1_input_kb = kb_emb_layer(sequence_layer_warrant1_input_kb)
         embedded_layer_reason_input_kb = kb_emb_layer(sequence_layer_reason_input_kb)
         embedded_layer_claim_input_kb = kb_emb_layer(sequence_layer_claim_input_kb)
+
+        # kb_dense = Dense(lstm_size * 2, activation='relu')
+        kb_vector_w0 = sum_pool_lambda_layer(concatenate([embedded_layer_reason_input_kb, embedded_layer_claim_input_kb, embedded_layer_warrant0_input_kb]))
+        kb_vector_w1 = sum_pool_lambda_layer(concatenate([embedded_layer_reason_input_kb, embedded_layer_claim_input_kb, embedded_layer_warrant1_input_kb]))
 
     if fn_embeddings is not None :
         sequence_layer_warrant0_input_fn = Input(shape=(max_len,), dtype='int32', name="sequence_layer_warrant0_input_fn")
@@ -311,6 +322,10 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
         embedded_layer_reason_input_fn = fn_emb_layer(sequence_layer_reason_input_fn)
         embedded_layer_claim_input_fn = fn_emb_layer(sequence_layer_claim_input_fn)
 
+        # fn_dense = Dense(lstm_size * 2, activation='relu')
+        fn_vector_w0 = sum_pool_lambda_layer(concatenate([embedded_layer_reason_input_fn, embedded_layer_claim_input_fn, embedded_layer_warrant0_input_fn]))
+        fn_vector_w1 = sum_pool_lambda_layer(concatenate([embedded_layer_reason_input_fn, embedded_layer_claim_input_fn, embedded_layer_warrant1_input_fn]))
+
     bidi_lstm_layer_warrant0 = Bidirectional(LSTM(lstm_size, return_sequences=True), name='BiDiLSTM-W0')(embedded_layer_warrant0_input)
     bidi_lstm_layer_warrant1 = Bidirectional(LSTM(lstm_size, return_sequences=True), name='BiDiLSTM-W1')(embedded_layer_warrant1_input)
     bidi_lstm_layer_reason = Bidirectional(LSTM(lstm_size, return_sequences=True), name='BiDiLSTM-Reason')(embedded_layer_reason_input)
@@ -318,16 +333,7 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
     # add context to the attention layer
     bidi_lstm_layer_debate = Bidirectional(LSTM(lstm_size, return_sequences=True), name='BiDiLSTM-Context')(embedded_layer_debate_input)
 
-    # max-pooling
-    max_pool_lambda_layer = Lambda(lambda x: keras.backend.max(x, axis=1, keepdims=False), output_shape=lambda x: (x[0], x[2]))
-    max_pool_lambda_layer.supports_masking = True
-    # sum-pooling
-    sum_pool_lambda_layer = Lambda(lambda x: keras.backend.sum(x, axis=1, keepdims=False), output_shape=lambda x: (x[0], x[2]))
-    sum_pool_lambda_layer.supports_masking = True
     # two attention vectors
-
-    fn_vector_w0 = sum_pool_lambda_layer(concatenate([embedded_layer_reason_input_fn, embedded_layer_claim_input_fn, embedded_layer_warrant0_input_fn]))
-    fn_vector_w1 = sum_pool_lambda_layer(concatenate([embedded_layer_reason_input_fn, embedded_layer_claim_input_fn, embedded_layer_warrant1_input_fn]))
 
     if rich_context:
         attention_vector_for_w0 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant1, bidi_lstm_layer_debate]))
@@ -336,8 +342,14 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
         attention_vector_for_w0 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant1]))
         attention_vector_for_w1 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant0]))
 
-    attention_warrant0 = AttentionLSTM(warrant_lstm_size, concatenate([attention_vector_for_w0, fn_vector_w0]))(bidi_lstm_layer_warrant0)
-    attention_warrant1 = AttentionLSTM(warrant_lstm_size, concatenate([attention_vector_for_w1, fn_vector_w1]))(bidi_lstm_layer_warrant1)
+    attention_warrant0 = AttentionLSTM(warrant_lstm_size, concatenate([attention_vector_for_w0,
+                                                                       *((kb_vector_w0,) if kb_embeddings is not None  else ()),
+                                                                       *((fn_vector_w0,) if fn_embeddings is not None  else ()),
+                                                                       ]))(bidi_lstm_layer_warrant0)
+    attention_warrant1 = AttentionLSTM(warrant_lstm_size, concatenate([attention_vector_for_w1,
+                                                                       *((kb_vector_w1,) if kb_embeddings is not None  else ()),
+                                                                       *((fn_vector_w1,) if fn_embeddings is not None  else ()),
+                                                                       ]))(bidi_lstm_layer_warrant1)
 
     # concatenate them
     dropout_layer = Dropout(dropout)(add([attention_warrant0, attention_warrant1]))

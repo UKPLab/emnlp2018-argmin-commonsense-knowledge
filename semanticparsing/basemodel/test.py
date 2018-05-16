@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 from keras.preprocessing import sequence
-from keras import callbacks
+from keras import callbacks, models
 
 
 from semanticparsing.basemodel import data_loader, vocabulary_embeddings_extractor
@@ -54,47 +54,19 @@ def __main__():
     entity_to_indices_map, entity_index_to_embeddings_map = kb_embeddings.load_kb_embeddings(current_dir + "/../entity-linking/data/WikidataEmb/dec_17_100/")
     frame_to_indices_map, frame_index_to_embeddings_map = fn_embeddings.load_fn_embeddings(current_dir + "/data/frameEmbeddings/dict_frame_to_emb_50dim_transE_npArray.pkl")
 
-    (train_instance_id_list, train_warrant0_list, train_warrant1_list, train_correct_label_w0_or_w1_list,
-     train_reason_list, train_claim_list, train_debate_meta_data_list) = \
-        data_loader.load_single_file(current_dir + '/data/arg-comprehension/train-w-swap.tsv', word_to_indices_map)
-
-    train_warrant0_entities_list, train_warrant1_entities_list, train_reason_entities_list, train_claim_entities_list = \
-        WD.load_single_file(current_dir + '/data/data-annotations/train_entitylinking_dict.json',
-                            train_instance_id_list, entity_to_indices_map)
-
-    train_warrant0_frames_list, train_warrant1_frames_list, train_reason_frames_list, train_claim_frames_list = \
-        FN.load_single_file(current_dir + '/data/data-annotations/train-full_predictions_with_lexicon_IH.pickle',
-                            train_instance_id_list, frame_to_indices_map)
-
     (dev_instance_id_list, dev_warrant0_list, dev_warrant1_list, dev_correct_label_w0_or_w1_list,
      dev_reason_list, dev_claim_list, dev_debate_meta_data_list) = \
-        data_loader.load_single_file(current_dir + '/data/arg-comprehension-full/dev-full.txt', word_to_indices_map)
+        data_loader.load_single_file(current_dir + '/data/arg-comprehension/test.tsv', word_to_indices_map)
 
     dev_warrant0_entities_list, dev_warrant1_entities_list, dev_reason_entities_list, dev_claim_entities_list = \
-        WD.load_single_file(current_dir + '/data/data-annotations/dev_entitylinking_dict.json',
+        WD.load_single_file(current_dir + '/data/data-annotations/test_entitylinking_dict.json',
                             dev_instance_id_list, entity_to_indices_map)
 
     dev_warrant0_frames_list, dev_warrant1_frames_list, dev_reason_frames_list, dev_claim_frames_list = \
-        FN.load_single_file(current_dir + '/data/data-annotations/dev-full_predictions_with_lexicon_IH.pickle',
+        FN.load_single_file(current_dir + '/data/data-annotations/test-full_predictions_with_lexicon_IH.pickle',
                             dev_instance_id_list, frame_to_indices_map)
 
-    # (test_instance_id_list, test_warrant0_list, test_warrant1_list, test_correct_label_w0_or_w1_list,
-    #  test_reason_list, test_claim_list, test_debate_meta_data_list) = \
-    #     data_loader.load_single_file(current_dir + '/data/arg-comprehension//test.tsv', word_to_indices_map)
-
     # pad all sequences
-    (train_warrant0_list, train_warrant1_list, train_reason_list, train_claim_list, train_debate_meta_data_list,
-     train_warrant0_entities_list, train_warrant1_entities_list, train_reason_entities_list, train_claim_entities_list,
-     train_warrant0_frames_list, train_warrant1_frames_list, train_reason_frames_list, train_claim_frames_list) = [
-        sequence.pad_sequences(x, maxlen=max_len) for x in
-        (train_warrant0_list, train_warrant1_list, train_reason_list, train_claim_list, train_debate_meta_data_list,
-         train_warrant0_entities_list, train_warrant1_entities_list, train_reason_entities_list, train_claim_entities_list,
-         train_warrant0_frames_list, train_warrant1_frames_list, train_reason_frames_list, train_claim_frames_list)]
-
-    # (test_warrant0_list, test_warrant1_list, test_reason_list, test_claim_list, test_debate_meta_data_list) = [
-    #     sequence.pad_sequences(x, maxlen=max_len) for x in
-    #     (test_warrant0_list, test_warrant1_list, test_reason_list, test_claim_list, test_debate_meta_data_list)]
-
     (dev_warrant0_list, dev_warrant1_list, dev_reason_list, dev_claim_list, dev_debate_meta_data_list,
      dev_warrant0_entities_list, dev_warrant1_entities_list, dev_reason_entities_list, dev_claim_entities_list,
      dev_warrant0_frames_list, dev_warrant1_frames_list, dev_reason_frames_list, dev_claim_frames_list) = [
@@ -103,8 +75,6 @@ def __main__():
          dev_warrant0_entities_list, dev_warrant1_entities_list, dev_reason_entities_list, dev_claim_entities_list,
          dev_warrant0_frames_list, dev_warrant1_frames_list, dev_reason_frames_list, dev_claim_frames_list)]
 
-    assert train_warrant0_list.shape == train_warrant1_list.shape == train_reason_list.shape == train_claim_list.shape \
-           == train_debate_meta_data_list.shape
 
     lstm_size = 64
     warrant_lstm_size = 64
@@ -113,7 +83,7 @@ def __main__():
     batch_size = 16
     model_type = "fntranse"
 
-    print(f'Training: LSTM {lstm_size}, Warrant LSTM {warrant_lstm_size}, Dropout {dropout}, Batch {batch_size}')
+    print(f'Testing: {model_type}')
 
     accs = []
     for i in range(1, 11):
@@ -122,27 +92,14 @@ def __main__():
         np.random.seed(12345 + i)  # for reproducibility
 
         model = get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map, max_len, rich_context=True,
-                                                              dropout=dropout, lstm_size=lstm_size,
-                                                                 warrant_lstm_size=warrant_lstm_size,
-                                                                 # kb_embeddings=entity_index_to_embeddings_map,
-                                                                fn_embeddings=frame_index_to_embeddings_map
-                                                 )
-        model.fit(
-            {'sequence_layer_warrant0_input': train_warrant0_list, 'sequence_layer_warrant1_input': train_warrant1_list,
-             'sequence_layer_reason_input': train_reason_list, 'sequence_layer_claim_input': train_claim_list,
-             'sequence_layer_debate_input': train_debate_meta_data_list,
-             'sequence_layer_warrant0_input_kb': train_warrant0_entities_list, 'sequence_layer_warrant1_input_kb': train_warrant1_entities_list,
-             'sequence_layer_reason_input_kb': train_reason_entities_list, 'sequence_layer_claim_input_kb': train_claim_entities_list,
-             'sequence_layer_warrant0_input_fn': train_warrant0_frames_list, 'sequence_layer_warrant1_input_fn': train_warrant1_frames_list,
-             'sequence_layer_reason_input_fn': train_reason_frames_list, 'sequence_layer_claim_input_fn': train_claim_frames_list},
-            train_correct_label_w0_or_w1_list, epochs=nb_epoch, batch_size=batch_size, verbose=verbose,
-            validation_split=0.1,
-            callbacks=[callbacks.EarlyStopping(monitor="val_acc", patience=2, verbose=1),
-                       callbacks.ModelCheckpoint(f"trainedmodels/model_{model_type}_{i}.kerasmodel",
-                                                 monitor='val_acc', verbose=1, save_best_only=True)])
-
-        print(f"Load model from: trainedmodels/model_{model_type}_{i}.kerasmodel")
+                                                           dropout=dropout, lstm_size=lstm_size,
+                                                           warrant_lstm_size=warrant_lstm_size,
+                                                           kb_embeddings=entity_index_to_embeddings_map,
+                                                           fn_embeddings=frame_index_to_embeddings_map
+                                                           )
         model.load_weights(f"trainedmodels/model_{model_type}_{i}.kerasmodel")
+        # model = models.load_model(f"trainedmodels/model_{model_type}_{i}.kerasmodel")
+
         # model predictions
         predicted_probabilities_dev = model.predict(
             {'sequence_layer_warrant0_input': dev_warrant0_list, 'sequence_layer_warrant1_input': dev_warrant1_list,
@@ -157,10 +114,10 @@ def __main__():
         predicted_labels_dev = get_predicted_labels(predicted_probabilities_dev)
 
         acc_dev = np.sum(np.asarray(dev_correct_label_w0_or_w1_list) == predicted_labels_dev) / len(dev_correct_label_w0_or_w1_list)
-        print('Dev accuracy:', acc_dev)
+        print('Test accuracy:', acc_dev)
         accs.append(acc_dev)
     acc = np.average(accs)
-    print(f"Acc dev: {accs} -> {acc}")
+    print(f"Acc test: {accs} -> {acc}")
 
 
 def print_error_analysis_dev(ids: set) -> None:
