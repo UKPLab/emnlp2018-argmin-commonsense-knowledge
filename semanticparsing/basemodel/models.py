@@ -52,8 +52,8 @@ def get_attention_lstm(word_index_to_embeddings_map, max_len, rich_context: bool
     max_pool_lambda_layer.supports_masking = True
     attention_vector = max_pool_lambda_layer(context_concat)
 
-    attention_warrant0 = AttentionLSTM(lstm_size, attention_vector)(embedded_layer_warrant0_input)
-    attention_warrant1 = AttentionLSTM(lstm_size, attention_vector)(embedded_layer_warrant1_input)
+    attention_warrant0 = AttentionLSTM(lstm_size)(embedded_layer_warrant0_input, constants=attention_vector)
+    attention_warrant1 = AttentionLSTM(lstm_size)(embedded_layer_warrant1_input, constants=attention_vector)
 
     # concatenate them
     dropout_layer = Dropout(dropout)(add([attention_warrant0, attention_warrant1]))
@@ -118,8 +118,9 @@ def get_attention_lstm_intra_warrant(word_index_to_embeddings_map, max_len, rich
         attention_vector_for_w0 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant1]))
         attention_vector_for_w1 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant0]))
 
-    attention_warrant0 = AttentionLSTM(lstm_size, attention_vector_for_w0)(bidi_lstm_layer_warrant0)
-    attention_warrant1 = AttentionLSTM(lstm_size, attention_vector_for_w1)(bidi_lstm_layer_warrant1)
+    attention_warrant0 = AttentionLSTM(lstm_size)(bidi_lstm_layer_warrant0, constants=attention_vector_for_w0)
+    attention_warrant1 = AttentionLSTM(lstm_size)(bidi_lstm_layer_warrant1, constants=attention_vector_for_w1)
+
 
     # concatenate them
     dropout_layer = Dropout(dropout)(add([attention_warrant0, attention_warrant1]))
@@ -287,7 +288,7 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
     sequence_layer_debate_input = Input(shape=(max_len,), dtype='int32', name="sequence_layer_debate_input")
 
     # now define embedded layers of the input
-    word_emb_layer = Embedding(embeddings.shape[0], embeddings.shape[1], input_length=max_len, weights=[embeddings], mask_zero=True)
+    word_emb_layer = Embedding(embeddings.shape[0], embeddings.shape[1], input_length=max_len, weights=[embeddings], mask_zero=True, trainable=False)
     embedded_layer_warrant0_input = word_emb_layer(sequence_layer_warrant0_input)
     embedded_layer_warrant1_input = word_emb_layer(sequence_layer_warrant1_input)
     embedded_layer_reason_input = word_emb_layer(sequence_layer_reason_input)
@@ -300,7 +301,7 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
         sequence_layer_reason_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_reason_input_kb")
         sequence_layer_claim_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_claim_input_kb")
 
-        kb_emb_layer = Embedding(kb_embeddings.shape[0], kb_embeddings.shape[1], input_length=max_len, weights=[kb_embeddings], mask_zero=True)
+        kb_emb_layer = Embedding(kb_embeddings.shape[0], kb_embeddings.shape[1], input_length=max_len, weights=[kb_embeddings], mask_zero=True, trainable=False)
         embedded_layer_warrant0_input_kb = kb_emb_layer(sequence_layer_warrant0_input_kb)
         embedded_layer_warrant1_input_kb = kb_emb_layer(sequence_layer_warrant1_input_kb)
         embedded_layer_reason_input_kb = kb_emb_layer(sequence_layer_reason_input_kb)
@@ -316,7 +317,7 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
         sequence_layer_reason_input_fn = Input(shape=(max_len,), dtype='int32', name="sequence_layer_reason_input_fn")
         sequence_layer_claim_input_fn = Input(shape=(max_len,), dtype='int32', name="sequence_layer_claim_input_fn")
 
-        fn_emb_layer = Embedding(fn_embeddings.shape[0], fn_embeddings.shape[1], input_length=max_len, weights=[fn_embeddings], mask_zero=True)
+        fn_emb_layer = Embedding(fn_embeddings.shape[0], fn_embeddings.shape[1], input_length=max_len, weights=[fn_embeddings], mask_zero=True, trainable=False)
         embedded_layer_warrant0_input_fn = fn_emb_layer(sequence_layer_warrant0_input_fn)
         embedded_layer_warrant1_input_fn = fn_emb_layer(sequence_layer_warrant1_input_fn)
         embedded_layer_reason_input_fn = fn_emb_layer(sequence_layer_reason_input_fn)
@@ -342,14 +343,16 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
         attention_vector_for_w0 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant1]))
         attention_vector_for_w1 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant0]))
 
-    attention_warrant0 = AttentionLSTM(warrant_lstm_size, concatenate([attention_vector_for_w0,
-                                                                       *((kb_vector_w0,) if kb_embeddings is not None  else ()),
-                                                                       *((fn_vector_w0,) if fn_embeddings is not None  else ()),
-                                                                       ]))(bidi_lstm_layer_warrant0)
-    attention_warrant1 = AttentionLSTM(warrant_lstm_size, concatenate([attention_vector_for_w1,
-                                                                       *((kb_vector_w1,) if kb_embeddings is not None  else ()),
-                                                                       *((fn_vector_w1,) if fn_embeddings is not None  else ()),
-                                                                       ]))(bidi_lstm_layer_warrant1)
+    attention_warrant0 = AttentionLSTM(warrant_lstm_size)(bidi_lstm_layer_warrant0,
+                                                          constants=concatenate([attention_vector_for_w0,
+                                                                                 *((kb_vector_w0,) if kb_embeddings is not None  else ()),
+                                                                                 *((fn_vector_w0,) if fn_embeddings is not None  else ()),
+                                                                                 ]))
+    attention_warrant1 = AttentionLSTM(warrant_lstm_size)(bidi_lstm_layer_warrant1,
+                                                          constants=concatenate([attention_vector_for_w1,
+                                                                                 *((kb_vector_w1,) if kb_embeddings is not None  else ()),
+                                                                                 *((fn_vector_w1,) if fn_embeddings is not None  else ()),
+                                                                                 ]))
 
     # concatenate them
     dropout_layer = Dropout(dropout)(add([attention_warrant0, attention_warrant1]))

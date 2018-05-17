@@ -1,52 +1,79 @@
 """
-Adapted from https://github.com/codekansas/keras-language-modeling/blob/master/attention_lstm.py
+Based on https://github.com/codekansas/keras-language-modeling/blob/master/attention_lstm.py
 """
 
 from keras import backend as K
 from keras.engine import InputSpec
-from keras.layers import LSTM, activations, Wrapper
+from keras.layers import LSTM, LSTMCell, activations, Wrapper, initializers, regularizers, constraints, RNN
 
 
-class AttentionLSTM(LSTM):
-    def __init__(self, output_dim, attention_vec, attn_activation='tanh', single_attention_param=False, **kwargs):
-        self.attention_vec = attention_vec
+class AttentionLSTMCell(LSTMCell):
+    def __init__(self, output_dim, attn_activation='tanh', single_attention_param=False, **kwargs):
         self.attn_activation = activations.get(attn_activation)
         self.single_attention_param = single_attention_param
+        self.cell = LSTMCell(output_dim, **kwargs)
 
-        super(AttentionLSTM, self).__init__(output_dim, **kwargs)
+        super(AttentionLSTMCell, self).__init__(output_dim, **kwargs)
 
     def build(self, input_shape):
-        super(AttentionLSTM, self).build(input_shape)
+        constants_shape = input_shape[-1]
+        self.cell.build(input_shape[0])
+        attention_dim = constants_shape[-1]
+        output_dim = self.units
 
-        if hasattr(self.attention_vec, '_keras_shape'):
-            attention_dim = self.attention_vec._keras_shape[1]
-        else:
-            raise Exception('Layer could not be build: No information about expected input shape.')
-        output_dim = self.cell.units
-        self.U_a = self.recurrent_initializer((output_dim, output_dim))
-        self.b_a = K.zeros((output_dim,), name='{}_b_a'.format(self.name))
+        self.U_a = self.add_weight(shape=(output_dim, output_dim),
+                                    name='U_a',
+                                    initializer=self.recurrent_initializer,
+                                    regularizer=self.recurrent_regularizer,
+                                    constraint=self.recurrent_constraint)
+        self.b_a = self.add_weight(shape=(output_dim,),
+                        name='b_a',
+                        initializer=self.bias_initializer,
+                        regularizer=self.bias_regularizer,
+                        constraint=self.bias_constraint)
 
-        self.U_m = self.recurrent_initializer((attention_dim, output_dim))
-        self.b_m = K.zeros((output_dim,))
+        self.U_m = self.add_weight(shape=(attention_dim, output_dim),
+                                  name='U_a',
+                                  initializer=self.recurrent_initializer,
+                                  regularizer=self.recurrent_regularizer,
+                                  constraint=self.recurrent_constraint)
+        self.b_m = self.add_weight(shape=(output_dim,),
+                                   name='b_m',
+                                   initializer=self.bias_initializer,
+                                   regularizer=self.bias_regularizer,
+                                   constraint=self.bias_constraint)
 
         if self.single_attention_param:
-            self.U_s = self.recurrent_initializer((output_dim, 1))
-            self.b_s = K.zeros((1,))
+            self.U_s = self.add_weight(shape=(output_dim, 1),
+                                       name='U_s',
+                                       initializer=self.recurrent_initializer,
+                                       regularizer=self.recurrent_regularizer,
+                                       constraint=self.recurrent_constraint)
+            self.b_s = self.add_weight(shape=(output_dim, 1),
+                                       name='b_s',
+                                       initializer=self.bias_initializer,
+                                       regularizer=self.bias_regularizer,
+                                       constraint=self.bias_constraint)
         else:
-            self.U_s = self.recurrent_initializer((output_dim, output_dim))
-            self.b_s = K.zeros((output_dim,))
-
-        self._trainable_weights += [self.U_a, self.U_m, self.U_s, self.b_a, self.b_m, self.b_s]
+            self.U_s = self.add_weight(shape=(output_dim, output_dim),
+                                       name='U_s',
+                                       initializer=self.recurrent_initializer,
+                                       regularizer=self.recurrent_regularizer,
+                                       constraint=self.recurrent_constraint)
+            self.b_s = self.add_weight(shape=(output_dim,),
+                                       name='b_s',
+                                       initializer=self.bias_initializer,
+                                       regularizer=self.bias_regularizer,
+                                       constraint=self.bias_constraint)
 
         if self._initial_weights is not None:
             self.set_weights(self._initial_weights)
             del self._initial_weights
 
-    def step(self, x, states):
-        h, [h, c] = super(AttentionLSTM, self).step(x, states)
-        attention = states[4]
-
-        # print("Attention type: ", type(attention)) = <class 'theano.tensor.var.TensorVariable'>
+    def call(self, x, states, training=None, constants=None):
+        h, [h, c] = self.cell.call(x, states, training)
+        constants = constants[0]
+        attention = K.dot(constants, self.U_m) + self.b_m
 
         m = self.attn_activation(K.dot(h, self.U_a) * attention + self.b_a)
         # Intuitively it makes more sense to use a sigmoid (was getting some NaN problems
@@ -54,117 +81,174 @@ class AttentionLSTM(LSTM):
         s = K.sigmoid(K.dot(m, self.U_s) + self.b_s)
 
         if self.single_attention_param:
-            h = h * K.repeat_elements(s, self.cell.units, axis=1)
+            h = h * K.repeat_elements(s, self.units, axis=1)
         else:
             h = h * s
 
         return h, [h, c]
 
-    def get_constants(self, x):
-        constants = super(AttentionLSTM, self).get_constants(x)
-        constants.append(K.dot(self.attention_vec, self.U_m) + self.b_m)
-        return constants
 
+class AttentionLSTM(RNN):
+    def __init__(self, units, attn_activation='tanh', single_attention_param=False,
+                 activation='tanh',
+                 recurrent_activation='hard_sigmoid',
+                 use_bias=True,
+                 kernel_initializer='glorot_uniform',
+                 recurrent_initializer='orthogonal',
+                 bias_initializer='zeros',
+                 unit_forget_bias=True,
+                 kernel_regularizer=None,
+                 recurrent_regularizer=None,
+                 bias_regularizer=None,
+                 activity_regularizer=None,
+                 kernel_constraint=None,
+                 recurrent_constraint=None,
+                 bias_constraint=None,
+                 dropout=0.,
+                 recurrent_dropout=0.,
+                 implementation=1,
+                 return_sequences=False,
+                 return_state=False,
+                 go_backwards=False,
+                 stateful=False,
+                 unroll=False,
+                 **kwargs):
 
-class AttentionLSTMWrapper(Wrapper):
-    def __init__(self, layer, attention_vec, attn_activation='tanh', single_attention_param=False, **kwargs):
-        assert isinstance(layer, LSTM)
         self.supports_masking = True
-        self.attention_vec = attention_vec
         self.attn_activation = activations.get(attn_activation)
         self.single_attention_param = single_attention_param
-        super(AttentionLSTMWrapper, self).__init__(layer, **kwargs)
 
-    def build(self, input_shape):
-        assert len(input_shape) >= 3
-        self.input_spec = [InputSpec(shape=input_shape)]
+        cell = AttentionLSTMCell(units,
+                        attn_activation=attn_activation, single_attention_param=single_attention_param,
+                        activation=activation,
+                        recurrent_activation=recurrent_activation,
+                        use_bias=use_bias,
+                        kernel_initializer=kernel_initializer,
+                        recurrent_initializer=recurrent_initializer,
+                        unit_forget_bias=unit_forget_bias,
+                        bias_initializer=bias_initializer,
+                        kernel_regularizer=kernel_regularizer,
+                        recurrent_regularizer=recurrent_regularizer,
+                        bias_regularizer=bias_regularizer,
+                        kernel_constraint=kernel_constraint,
+                        recurrent_constraint=recurrent_constraint,
+                        bias_constraint=bias_constraint,
+                        dropout=dropout,
+                        recurrent_dropout=recurrent_dropout,
+                        implementation=implementation)
+        super(AttentionLSTM, self).__init__(cell,
+                                   return_sequences=return_sequences,
+                                   return_state=return_state,
+                                   go_backwards=go_backwards,
+                                   stateful=stateful,
+                                   unroll=unroll,
+                                   **kwargs)
+        self.activity_regularizer = regularizers.get(activity_regularizer)
 
-        if not self.layer.built:
-            self.layer.build(input_shape)
-            self.layer.built = True
+    def call(self, inputs, mask=None, training=None, initial_state=None,
+             constants=None):
+        self.cell._dropout_mask = None
+        self.cell._recurrent_dropout_mask = None
+        return super(AttentionLSTM, self).call(inputs,
+                                      mask=mask,
+                                      training=training,
+                                      initial_state=initial_state,
+                                               constants=constants)
 
-        super(AttentionLSTMWrapper, self).build()
+    @property
+    def units(self):
+        return self.cell.units
 
-        if hasattr(self.attention_vec, '_keras_shape'):
-            attention_dim = self.attention_vec._keras_shape[1]
-        else:
-            raise Exception('Layer could not be build: No information about expected input shape.')
+    @property
+    def activation(self):
+        return self.cell.activation
 
-        self.U_a = self.layer.inner_init((self.layer.output_dim, self.layer.output_dim), name='{}_U_a'.format(self.name))
-        self.b_a = K.zeros((self.layer.output_dim,), name='{}_b_a'.format(self.name))
+    @property
+    def recurrent_activation(self):
+        return self.cell.recurrent_activation
 
-        self.U_m = self.layer.inner_init((attention_dim, self.layer.output_dim), name='{}_U_m'.format(self.name))
-        self.b_m = K.zeros((self.layer.output_dim,), name='{}_b_m'.format(self.name))
+    @property
+    def use_bias(self):
+        return self.cell.use_bias
 
-        if self.single_attention_param:
-            self.U_s = self.layer.inner_init((self.layer.output_dim, 1), name='{}_U_s'.format(self.name))
-            self.b_s = K.zeros((1,), name='{}_b_s'.format(self.name))
-        else:
-            self.U_s = self.layer.inner_init((self.layer.output_dim, self.layer.output_dim), name='{}_U_s'.format(self.name))
-            self.b_s = K.zeros((self.layer.output_dim,), name='{}_b_s'.format(self.name))
+    @property
+    def kernel_initializer(self):
+        return self.cell.kernel_initializer
 
-        self._trainable_weights = [self.U_a, self.U_m, self.U_s, self.b_a, self.b_m, self.b_s]
+    @property
+    def recurrent_initializer(self):
+        return self.cell.recurrent_initializer
 
-    def get_output_shape_for(self, input_shape):
-        return self.layer.get_output_shape_for(input_shape)
+    @property
+    def bias_initializer(self):
+        return self.cell.bias_initializer
 
-    def step(self, x, states):
-        h, [h, c] = self.layer.step(x, states)
-        attention = states[4]
+    @property
+    def unit_forget_bias(self):
+        return self.cell.unit_forget_bias
 
-        m = self.attn_activation(K.dot(h, self.U_a) * attention + self.b_a)
-        s = K.sigmoid(K.dot(m, self.U_s) + self.b_s)
+    @property
+    def kernel_regularizer(self):
+        return self.cell.kernel_regularizer
 
-        if self.single_attention_param:
-            h = h * K.repeat_elements(s, self.layer.output_dim, axis=1)
-        else:
-            h = h * s
+    @property
+    def recurrent_regularizer(self):
+        return self.cell.recurrent_regularizer
 
-        return h, [h, c]
+    @property
+    def bias_regularizer(self):
+        return self.cell.bias_regularizer
 
-    def get_constants(self, x):
-        constants = self.layer.get_constants(x)
-        constants.append(K.dot(self.attention_vec, self.U_m) + self.b_m)
-        return constants
+    @property
+    def kernel_constraint(self):
+        return self.cell.kernel_constraint
 
-    def call(self, x, mask=None):
-        # input shape: (nb_samples, time (padded with zeros), input_dim)
-        # note that the .build() method of subclasses MUST define
-        # self.input_spec with a complete input shape.
-        input_shape = self.input_spec[0].shape
-        if K._BACKEND == 'tensorflow':
-            if not input_shape[1]:
-                raise Exception('When using TensorFlow, you should define '
-                                'explicitly the number of timesteps of '
-                                'your sequences.\n'
-                                'If your first layer is an Embedding, '
-                                'make sure to pass it an "input_length" '
-                                'argument. Otherwise, make sure '
-                                'the first layer has '
-                                'an "input_shape" or "batch_input_shape" '
-                                'argument, including the time axis. '
-                                'Found input shape at layer ' + self.name +
-                                ': ' + str(input_shape))
-        if self.layer.stateful:
-            initial_states = self.layer.states
-        else:
-            initial_states = self.layer.get_initial_states(x)
-        constants = self.get_constants(x)
-        preprocessed_input = self.layer.preprocess_input(x)
+    @property
+    def recurrent_constraint(self):
+        return self.cell.recurrent_constraint
 
-        last_output, outputs, states = K.rnn(self.step, preprocessed_input,
-                                             initial_states,
-                                             go_backwards=self.layer.go_backwards,
-                                             mask=mask,
-                                             constants=constants,
-                                             unroll=self.layer.unroll,
-                                             input_length=input_shape[1])
-        if self.layer.stateful:
-            self._updates = []
-            for i in range(len(states)):
-                self.updates.append((self.layer.states[i], states[i]))
+    @property
+    def bias_constraint(self):
+        return self.cell.bias_constraint
 
-        if self.layer.return_sequences:
-            return outputs
-        else:
-            return last_output
+    @property
+    def dropout(self):
+        return self.cell.dropout
+
+    @property
+    def recurrent_dropout(self):
+        return self.cell.recurrent_dropout
+
+    @property
+    def implementation(self):
+        return self.cell.implementation
+
+    def get_config(self):
+        config = {'units': self.units,
+                  'activation': activations.serialize(self.activation),
+                  'recurrent_activation': activations.serialize(self.recurrent_activation),
+                  'use_bias': self.use_bias,
+                  'kernel_initializer': initializers.serialize(self.kernel_initializer),
+                  'recurrent_initializer': initializers.serialize(self.recurrent_initializer),
+                  'bias_initializer': initializers.serialize(self.bias_initializer),
+                  'unit_forget_bias': self.unit_forget_bias,
+                  'kernel_regularizer': regularizers.serialize(self.kernel_regularizer),
+                  'recurrent_regularizer': regularizers.serialize(self.recurrent_regularizer),
+                  'bias_regularizer': regularizers.serialize(self.bias_regularizer),
+                  'activity_regularizer': regularizers.serialize(self.activity_regularizer),
+                  'kernel_constraint': constraints.serialize(self.kernel_constraint),
+                  'recurrent_constraint': constraints.serialize(self.recurrent_constraint),
+                  'bias_constraint': constraints.serialize(self.bias_constraint),
+                  'dropout': self.dropout,
+                  'recurrent_dropout': self.recurrent_dropout,
+                  'implementation': self.implementation}
+        base_config = super(AttentionLSTM, self).get_config()
+        del base_config['cell']
+        return dict(list(base_config.items()) + list(config.items()))
+
+    @classmethod
+    def from_config(cls, config):
+        if 'implementation' in config and config['implementation'] == 0:
+            config['implementation'] = 1
+        return cls(**config)
+
