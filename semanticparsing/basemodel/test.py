@@ -86,6 +86,7 @@ def __main__():
     print(f'Testing: {model_type}')
 
     accs = []
+    predictions = []
     for i in range(1, 11):
         print("Run: ", i)
 
@@ -112,12 +113,13 @@ def __main__():
             batch_size=batch_size, verbose=1)
 
         predicted_labels_dev = get_predicted_labels(predicted_probabilities_dev)
-
+        predictions.append(predicted_labels_dev)
         acc_dev = np.sum(np.asarray(dev_correct_label_w0_or_w1_list) == predicted_labels_dev) / len(dev_correct_label_w0_or_w1_list)
         print('Test accuracy:', acc_dev)
         accs.append(acc_dev)
     acc = np.average(accs)
     print(f"Acc test: {accs} -> {acc}")
+
 
 
 def print_error_analysis_dev(ids: set) -> None:
