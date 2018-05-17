@@ -124,7 +124,7 @@ def get_attention_lstm_intra_warrant(word_index_to_embeddings_map, max_len, rich
 
 
     # concatenate them
-    dropout_layer = Dropout(dropout)(add([attention_warrant0, attention_warrant1]))
+    dropout_layer = Dropout(dropout)(concatenate([add([attention_warrant0, attention_warrant1]), attention_warrant0, attention_warrant1]))
 
     # and add one extra layer with ReLU
     dense1 = Dense(int(lstm_size / 2), activation='relu')(dropout_layer)
@@ -308,9 +308,9 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
         embedded_layer_reason_input_kb = kb_emb_layer(sequence_layer_reason_input_kb)
         embedded_layer_claim_input_kb = kb_emb_layer(sequence_layer_claim_input_kb)
 
-        # kb_dense = Dense(lstm_size * 2, activation='relu')
-        kb_vector_w0 = sum_pool_lambda_layer(concatenate([embedded_layer_reason_input_kb, embedded_layer_claim_input_kb, embedded_layer_warrant0_input_kb]))
-        kb_vector_w1 = sum_pool_lambda_layer(concatenate([embedded_layer_reason_input_kb, embedded_layer_claim_input_kb, embedded_layer_warrant1_input_kb]))
+        kb_dense = Dense(lstm_size * 2, activation='relu')
+        kb_vector_w0 = kb_dense(sum_pool_lambda_layer(concatenate([embedded_layer_reason_input_kb, embedded_layer_claim_input_kb, embedded_layer_warrant0_input_kb])))
+        kb_vector_w1 = kb_dense(sum_pool_lambda_layer(concatenate([embedded_layer_reason_input_kb, embedded_layer_claim_input_kb, embedded_layer_warrant1_input_kb])))
 
     if fn_embeddings is not None :
         sequence_layer_warrant0_input_fn = Input(shape=(max_len,), dtype='int32', name="sequence_layer_warrant0_input_fn")
@@ -324,9 +324,9 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
         embedded_layer_reason_input_fn = fn_emb_layer(sequence_layer_reason_input_fn)
         embedded_layer_claim_input_fn = fn_emb_layer(sequence_layer_claim_input_fn)
 
-        # fn_dense = Dense(lstm_size * 2, activation='relu')
-        fn_vector_w0 = sum_pool_lambda_layer(concatenate([embedded_layer_reason_input_fn, embedded_layer_claim_input_fn, embedded_layer_warrant0_input_fn]))
-        fn_vector_w1 = sum_pool_lambda_layer(concatenate([embedded_layer_reason_input_fn, embedded_layer_claim_input_fn, embedded_layer_warrant1_input_fn]))
+        fn_dense = Dense(lstm_size * 2, activation='relu')
+        fn_vector_w0 = fn_dense(sum_pool_lambda_layer(concatenate([embedded_layer_reason_input_fn, embedded_layer_claim_input_fn, embedded_layer_warrant0_input_fn])))
+        fn_vector_w1 = fn_dense(sum_pool_lambda_layer(concatenate([embedded_layer_reason_input_fn, embedded_layer_claim_input_fn, embedded_layer_warrant1_input_fn])))
 
     bidi_lstm_layer_warrant0 = Bidirectional(LSTM(lstm_size, return_sequences=True), name='BiDiLSTM-W0')(embedded_layer_warrant0_input)
     bidi_lstm_layer_warrant1 = Bidirectional(LSTM(lstm_size, return_sequences=True), name='BiDiLSTM-W1')(embedded_layer_warrant1_input)
@@ -356,7 +356,7 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
                                                                                  ]))
 
     # concatenate them
-    dropout_layer = Dropout(dropout)(add([attention_warrant0, attention_warrant1]))
+    dropout_layer = Dropout(dropout)(concatenate([add([attention_warrant0, attention_warrant1]), attention_warrant0, attention_warrant1]))
 
     # and add one extra layer with ReLU
     dense1 = Dense(int(warrant_lstm_size / 2), activation='relu')(dropout_layer)

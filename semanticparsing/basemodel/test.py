@@ -1,5 +1,6 @@
 import json
 import os
+import click
 
 import numpy as np
 from keras.preprocessing import sequence
@@ -38,7 +39,9 @@ def get_predicted_labels(predicted_probabilities):
     return predicted_labels_numpy
 
 
-def __main__():
+@click.command()
+@click.argument('model_name')
+def main(model_name):
     # optional (and default values)
     verbose = 1
 
@@ -81,9 +84,8 @@ def __main__():
     dropout = 0.4  # empirically tested on dev set
     nb_epoch = 25
     batch_size = 16
-    model_type = "fntranse"
 
-    print(f'Testing: {model_type}')
+    print(f'Testing: {model_name}')
 
     accs = []
     predictions = []
@@ -96,9 +98,9 @@ def __main__():
                                                            dropout=dropout, lstm_size=lstm_size,
                                                            warrant_lstm_size=warrant_lstm_size,
                                                            kb_embeddings=entity_index_to_embeddings_map,
-                                                           fn_embeddings=frame_index_to_embeddings_map
+                                                           # fn_embeddings=frame_index_to_embeddings_map
                                                            )
-        model.load_weights(f"trainedmodels/model_{model_type}_{i}.kerasmodel")
+        model.load_weights(f"trainedmodels/model_{model_name}_{i}.kerasmodel")
         # model = models.load_model(f"trainedmodels/model_{model_type}_{i}.kerasmodel")
 
         # model predictions
@@ -145,4 +147,4 @@ def print_error_analysis_dev(ids: set) -> None:
 
 
 if __name__ == "__main__":
-    __main__()
+    main()

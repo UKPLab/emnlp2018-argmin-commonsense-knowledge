@@ -1,5 +1,8 @@
 import json
 import os
+import datetime
+
+import click
 
 import numpy as np
 from keras.preprocessing import sequence
@@ -38,7 +41,9 @@ def get_predicted_labels(predicted_probabilities):
     return predicted_labels_numpy
 
 
-def __main__():
+@click.command()
+@click.argument('model_type')
+def main(model_type):
     # optional (and default values)
     verbose = 1
 
@@ -68,14 +73,14 @@ def __main__():
 
     (dev_instance_id_list, dev_warrant0_list, dev_warrant1_list, dev_correct_label_w0_or_w1_list,
      dev_reason_list, dev_claim_list, dev_debate_meta_data_list) = \
-        data_loader.load_single_file(current_dir + '/data/arg-comprehension-full/dev-full.txt', word_to_indices_map)
+        data_loader.load_single_file(current_dir + '/data/arg-comprehension-full/test-full.txt', word_to_indices_map)
 
     dev_warrant0_entities_list, dev_warrant1_entities_list, dev_reason_entities_list, dev_claim_entities_list = \
-        WD.load_single_file(current_dir + '/data/data-annotations/dev_entitylinking_dict.json',
+        WD.load_single_file(current_dir + '/data/data-annotations/test_entitylinking_dict.json',
                             dev_instance_id_list, entity_to_indices_map)
 
     dev_warrant0_frames_list, dev_warrant1_frames_list, dev_reason_frames_list, dev_claim_frames_list = \
-        FN.load_single_file(current_dir + '/data/data-annotations/dev-full_predictions_with_lexicon_IH.pickle',
+        FN.load_single_file(current_dir + '/data/data-annotations/test-full_predictions_with_lexicon_IH.pickle',
                             dev_instance_id_list, frame_to_indices_map)
 
     # (test_instance_id_list, test_warrant0_list, test_warrant1_list, test_correct_label_w0_or_w1_list,
@@ -106,12 +111,14 @@ def __main__():
     assert train_warrant0_list.shape == train_warrant1_list.shape == train_reason_list.shape == train_claim_list.shape \
            == train_debate_meta_data_list.shape
 
-    lstm_size = 64
-    warrant_lstm_size = 64
-    dropout = 0.4  # empirically tested on dev set
+    lstm_size = 32
+    warrant_lstm_size = 32
+    dropout = 0.25  # empirically tested on dev set
     nb_epoch = 25
     batch_size = 16
-    model_type = "fntranse"
+
+    now = datetime.datetime.now()
+    model_name = f"{model_type}_{now.date()}_{now.microsecond}"
 
     print(f'Training: LSTM {lstm_size}, Warrant LSTM {warrant_lstm_size}, Dropout {dropout}, Batch {batch_size}')
 
@@ -121,12 +128,20 @@ def __main__():
 
         np.random.seed(12345 + i)  # for reproducibility
 
-        model = get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map, max_len, rich_context=True,
+
+        if "kb" in model_type or "fn" in model_type:
+            print("Training a model with world knwoledge.")
+            model = get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map, max_len, rich_context=True,
                                                               dropout=dropout, lstm_size=lstm_size,
                                                                  warrant_lstm_size=warrant_lstm_size,
-                                                                 # kb_embeddings=entity_index_to_embeddings_map,
-                                                                fn_embeddings=frame_index_to_embeddings_map
+                                                                 kb_embeddings=entity_index_to_embeddings_map if "kb" in model_type else None,
+                                                                fn_embeddings=frame_index_to_embeddings_map if "fn" in model_type else None
                                                  )
+        else:
+            print("Training the base model.")
+            model = get_attention_lstm_intra_warrant(word_index_to_embeddings_map, max_len, rich_context=True,
+                                                               dropout=dropout, lstm_size=lstm_size)
+
         model.fit(
             {'sequence_layer_warrant0_input': train_warrant0_list, 'sequence_layer_warrant1_input': train_warrant1_list,
              'sequence_layer_reason_input': train_reason_list, 'sequence_layer_claim_input': train_claim_list,
@@ -138,11 +153,11 @@ def __main__():
             train_correct_label_w0_or_w1_list, epochs=nb_epoch, batch_size=batch_size, verbose=verbose,
             validation_split=0.1,
             callbacks=[callbacks.EarlyStopping(monitor="val_acc", patience=2, verbose=1),
-                       callbacks.ModelCheckpoint(f"trainedmodels/model_{model_type}_{i}.kerasmodel",
+                       callbacks.ModelCheckpoint(f"trainedmodels/model_{model_name}_{i}.kerasmodel",
                                                  monitor='val_acc', verbose=1, save_best_only=True)])
 
-        print(f"Load model from: trainedmodels/model_{model_type}_{i}.kerasmodel")
-        model.load_weights(f"trainedmodels/model_{model_type}_{i}.kerasmodel")
+        print(f"Load model from: trainedmodels/model_{model_name}_{i}.kerasmodel")
+        model.load_weights(f"trainedmodels/model_{model_name}_{i}.kerasmodel")
         # model predictions
         predicted_probabilities_dev = model.predict(
             {'sequence_layer_warrant0_input': dev_warrant0_list, 'sequence_layer_warrant1_input': dev_warrant1_list,
@@ -186,4 +201,4 @@ def print_error_analysis_dev(ids: set) -> None:
 
 
 if __name__ == "__main__":
-    __main__()
+    main()
