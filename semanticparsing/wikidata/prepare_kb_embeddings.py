@@ -8,7 +8,7 @@ import json
 def prepare_embeddings():
 
     entity2idx = {}
-    with open("/home/sorokin/entity-linking/data/WikidataEmb/dec_17_50/" + "entity2id.txt", 'r') as f:
+    with open("../entity-linking/data/WikidataEmb/dec_17_50/" + "entity2id.txt", 'r') as f:
         f.readline()
         for l in f.readlines():
             k, v = tuple(l.strip().split("\t"))
@@ -19,6 +19,9 @@ def prepare_embeddings():
         data_annotations = json.load(f)
 
     with open("data/data-annotations/dev_entitylinking.json") as f:
+        data_annotations += json.load(f)
+
+    with open("data/data-annotations/test_entitylinking.json") as f:
         data_annotations += json.load(f)
 
     entity_ids = {e['linkings'][0][0] for l in data_annotations for s in l for e in s['entities'] if len(e['linkings']) > 0}

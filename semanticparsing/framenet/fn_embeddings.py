@@ -26,7 +26,7 @@ def load_fn_embeddings(path_to_file):
 
     frame2idx[all_zeroes] = 0  # 0 is reserved for padding
     frame2idx[unknown_el] = 1  # 1 is reserved for OOV
-    frame2idx[unknown_el] = 2  # 2 is reserved for no annotation tokens
+    frame2idx[no_annotation] = 2  # 2 is reserved for no annotation tokens
     embedding_size = len(embeddings[0])
     vector_oov = 2 * 0.1 * np.random.rand(embedding_size) - 0.1
     vector_na = 2 * 0.1 * np.random.rand(embedding_size) - 0.1
