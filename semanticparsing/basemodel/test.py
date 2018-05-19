@@ -10,7 +10,7 @@ from keras import callbacks, models
 from semanticparsing.basemodel import data_loader, vocabulary_embeddings_extractor
 from semanticparsing.basemodel.models import get_attention_lstm, \
     get_attention_lstm_intra_warrant, \
-     get_attention_lstm_intra_warrant_world_knowledge, \
+    get_attention_lstm_intra_warrant_kb_tokens, \
     get_attention_lstm_intra_warrant_kb_pooled
 from semanticparsing.wikidata import kb_embeddings, annotation_loader as WD
 from semanticparsing.framenet import fn_embeddings, annotation_loader as FN
@@ -94,12 +94,18 @@ def main(model_name):
 
         np.random.seed(12345 + i)  # for reproducibility
 
-        model = get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map, max_len, rich_context=True,
-                                                           dropout=dropout, lstm_size=lstm_size,
-                                                           warrant_lstm_size=warrant_lstm_size,
-                                                           kb_embeddings=entity_index_to_embeddings_map,
-                                                           # fn_embeddings=frame_index_to_embeddings_map
-                                                           )
+        if "kb" in model_name or "fn" in model_name:
+            print("Training a model with world knowledge.")
+            model = get_attention_lstm_intra_warrant_kb_tokens(word_index_to_embeddings_map, max_len, rich_context=True,
+                                                               dropout=dropout, lstm_size=lstm_size,
+                                                               warrant_lstm_size=warrant_lstm_size,
+                                                               kb_embeddings=entity_index_to_embeddings_map if "kb" in model_name else None,
+                                                               fn_embeddings=frame_index_to_embeddings_map if "fn" in model_name else None
+                                                               )
+        else:
+            print("Training the base model.")
+            model = get_attention_lstm_intra_warrant(word_index_to_embeddings_map, max_len, rich_context=True,
+                                                     dropout=dropout, lstm_size=lstm_size)
         model.load_weights(f"trainedmodels/model_{model_name}_{i}.kerasmodel")
         # model = models.load_model(f"trainedmodels/model_{model_type}_{i}.kerasmodel")
 

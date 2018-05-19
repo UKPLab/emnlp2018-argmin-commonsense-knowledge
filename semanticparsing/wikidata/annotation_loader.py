@@ -8,7 +8,7 @@ def extract_indices(sent: Dict, entity_to_indices_map: Dict) -> List:
                         if len(e['linkings']) > 0 and e['drop_score'] < 0.75}
 
     # now convert tokens to indices; set to 1 for OOV
-    word_indices_list = [entity_to_indices_map.get(token_entity_map[i], 1) if i in token_entity_map else 0
+    word_indices_list = [entity_to_indices_map.get(token_entity_map[i], 1) if i in token_entity_map else 2
                          for i in range(len(sent['tagged']))]
     return word_indices_list
 

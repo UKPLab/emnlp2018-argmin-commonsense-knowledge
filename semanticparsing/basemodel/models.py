@@ -93,7 +93,7 @@ def get_attention_lstm_intra_warrant(word_index_to_embeddings_map, max_len, rich
     sequence_layer_debate_input = Input(shape=(max_len,), dtype='int32', name="sequence_layer_debate_input")
 
     # now define embedded layers of the input
-    word_emb_layer = Embedding(embeddings.shape[0], embeddings.shape[1], input_length=max_len, weights=[embeddings], mask_zero=True, trainable=False)
+    word_emb_layer = Embedding(embeddings.shape[0], embeddings.shape[1], input_length=max_len, weights=[embeddings], mask_zero=True)
     embedded_layer_warrant0_input = word_emb_layer(sequence_layer_warrant0_input)
     embedded_layer_warrant1_input = word_emb_layer(sequence_layer_warrant1_input)
     embedded_layer_reason_input = word_emb_layer(sequence_layer_reason_input)
@@ -143,7 +143,7 @@ def get_attention_lstm_intra_warrant(word_index_to_embeddings_map, max_len, rich
     return model
 
 
-def get_attention_lstm_intra_warrant_world_knowledge(word_index_to_embeddings_map,
+def get_attention_lstm_intra_warrant_kb_tokens(word_index_to_embeddings_map,
                                                      max_len,
                                                      rich_context=False,
                                                      lstm_size=32,
@@ -230,11 +230,11 @@ def get_attention_lstm_intra_warrant_world_knowledge(word_index_to_embeddings_ma
         attention_vector_for_w0 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant1]))
         attention_vector_for_w1 = max_pool_lambda_layer(concatenate([bidi_lstm_layer_reason, bidi_lstm_layer_claim, bidi_lstm_layer_warrant0]))
 
-    attention_warrant0 = AttentionLSTM(warrant_lstm_size, attention_vector_for_w0)(bidi_lstm_layer_warrant0)
-    attention_warrant1 = AttentionLSTM(warrant_lstm_size, attention_vector_for_w1)(bidi_lstm_layer_warrant1)
+    attention_warrant0 = AttentionLSTM(lstm_size)(bidi_lstm_layer_warrant0, constants=attention_vector_for_w0)
+    attention_warrant1 = AttentionLSTM(lstm_size)(bidi_lstm_layer_warrant1, constants=attention_vector_for_w1)
 
     # concatenate them
-    dropout_layer = Dropout(dropout)(add([attention_warrant0, attention_warrant1]))
+    dropout_layer = Dropout(dropout)(concatenate([add([attention_warrant0, attention_warrant1]), attention_warrant0, attention_warrant1]))
 
     # and add one extra layer with ReLU
     dense1 = Dense(int(warrant_lstm_size / 2), activation='relu')(dropout_layer)
@@ -289,7 +289,7 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
     sequence_layer_debate_input = Input(shape=(max_len,), dtype='int32', name="sequence_layer_debate_input")
 
     # now define embedded layers of the input
-    word_emb_layer = Embedding(embeddings.shape[0], embeddings.shape[1], input_length=max_len, name='word_emb', weights=[embeddings], mask_zero=True, trainable=False)
+    word_emb_layer = Embedding(embeddings.shape[0], embeddings.shape[1], input_length=max_len, name='word_emb', weights=[embeddings], mask_zero=True)
     embedded_layer_warrant0_input = word_emb_layer(sequence_layer_warrant0_input)
     embedded_layer_warrant1_input = word_emb_layer(sequence_layer_warrant1_input)
     embedded_layer_reason_input = word_emb_layer(sequence_layer_reason_input)
@@ -302,7 +302,7 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
         sequence_layer_reason_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_reason_input_kb")
         sequence_layer_claim_input_kb = Input(shape=(max_len,), dtype='int32', name="sequence_layer_claim_input_kb")
 
-        kb_emb_layer = Embedding(kb_embeddings.shape[0], kb_embeddings.shape[1], input_length=max_len, name='kb_emb_layer', weights=[kb_embeddings], mask_zero=True, trainable=False)
+        kb_emb_layer = Embedding(kb_embeddings.shape[0], kb_embeddings.shape[1], input_length=max_len, name='kb_emb_layer', weights=[kb_embeddings], mask_zero=True)
         embedded_layer_warrant0_input_kb = kb_emb_layer(sequence_layer_warrant0_input_kb)
         embedded_layer_warrant1_input_kb = kb_emb_layer(sequence_layer_warrant1_input_kb)
         embedded_layer_reason_input_kb = kb_emb_layer(sequence_layer_reason_input_kb)
@@ -318,7 +318,7 @@ def get_attention_lstm_intra_warrant_kb_pooled(word_index_to_embeddings_map,
         sequence_layer_reason_input_fn = Input(shape=(max_len,), dtype='int32', name="sequence_layer_reason_input_fn")
         sequence_layer_claim_input_fn = Input(shape=(max_len,), dtype='int32', name="sequence_layer_claim_input_fn")
 
-        fn_emb_layer = Embedding(fn_embeddings.shape[0], fn_embeddings.shape[1], input_length=max_len, name='fn_emb_layer', weights=[fn_embeddings], mask_zero=True, trainable=False)
+        fn_emb_layer = Embedding(fn_embeddings.shape[0], fn_embeddings.shape[1], input_length=max_len, name='fn_emb_layer', weights=[fn_embeddings], mask_zero=True)
         embedded_layer_warrant0_input_fn = fn_emb_layer(sequence_layer_warrant0_input_fn)
         embedded_layer_warrant1_input_fn = fn_emb_layer(sequence_layer_warrant1_input_fn)
         embedded_layer_reason_input_fn = fn_emb_layer(sequence_layer_reason_input_fn)
